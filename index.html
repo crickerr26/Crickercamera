@@ -169,12 +169,11 @@
             c.lineWidth = 4; c.strokeStyle = "#fbbf24"; c.stroke();
             c.restore();
 
-            // --- GRID ZONES ---
-            const zoneLeftEnd = pillX + (pillW * 0.25);   // Team 1 end
-            const zoneScoreStart = pillX + (pillW * 0.42); // Score start
-            const zoneScoreEnd = pillX + (pillW * 0.58);   // Score end
-            const zoneRightStart = pillX + (pillW * 0.75); // Team 2 start
-
+            // --- ZONES ---
+            const zoneLeftEnd = pillX + (pillW * 0.25);
+            const zoneScoreStart = pillX + (pillW * 0.42);
+            const zoneScoreEnd = pillX + (pillW * 0.58);
+            const zoneRightStart = pillX + (pillW * 0.75);
             const logoS = barH * 0.65;
             const logoY = bottomY + (barH - logoS) / 2;
 
@@ -196,82 +195,74 @@
             c.fillStyle = "#64748b"; c.font = `500 ${barH * 0.14}px 'Roboto'`; c.fillText("BOWLING", t2NameX, bottomY + barH * 0.75);
             drawDivider(c, zoneRightStart, bottomY + barH*0.2, barH*0.6);
 
-            // 3. CENTER SCORE (Locked in middle)
+            // 3. CENTER SCORE
             const centerX = pillX + (pillW / 2);
             c.textAlign = "center";
-            
-            // Score
             c.fillStyle = "white"; c.font = `700 ${barH * 0.55}px 'Teko'`;
             c.fillText(`${match.score}/${match.wickets}`, centerX, bottomY + barH * 0.55);
-            
-            // Overs
             c.fillStyle = "#94a3b8"; c.font = `500 ${barH*0.16}px 'Roboto'`;
             c.fillText(`OVERS ${match.overs}.${match.balls}`, centerX, bottomY + barH * 0.85);
 
-            // TARGET (Shows if Target > 0)
+            // --- THE NEW EQUATION DISPLAY ---
             if(match.target > 0) {
-                 c.fillStyle = "#fbbf24"; c.font = `700 ${barH*0.16}px 'Roboto'`;
-                 c.fillText(`TARGET: ${match.target}`, centerX, bottomY + barH * 0.2);
+                 const runsNeeded = match.target - match.score;
+                 const totalBalls = (match.totalOvers || 0) * 6;
+                 const ballsBowled = (match.overs * 6) + match.balls;
+                 const ballsRem = totalBalls - ballsBowled;
+
+                 // Font reduced from 0.20 to 0.16 for a sleeker look
+                 c.fillStyle = "#fbbf24"; c.font = `700 ${barH*0.16}px 'Teko'`;
+                 
+                 c.fillText(`TO WIN - ${runsNeeded} | ${ballsRem}`, centerX, bottomY + barH * 0.2);
             }
 
-            // 4. BATSMEN (Left of Score)
+            // 4. BATSMEN
             const batStartX = zoneLeftEnd + (pillW * 0.02);
             const batMaxW = (zoneScoreStart - batStartX) - 10;
             c.textAlign = "left"; 
-            
-            // Striker (Formatted)
             c.fillStyle = "white"; 
             fitText(c, `► ${formatPlayerName(match.striker.name)}`, batStartX, bottomY + barH * 0.45, batMaxW * 0.7, barH*0.22, '700', 'Roboto');
             c.fillStyle = "#fbbf24"; c.font = `700 ${barH*0.22}px 'Roboto'`;
             c.fillText(`${match.striker.runs}(${match.striker.balls})`, batStartX + (batMaxW * 0.75), bottomY + barH * 0.45);
 
-            // Non-Striker (Formatted)
             c.fillStyle = "#94a3b8"; 
             fitText(c, formatPlayerName(match.nonStriker.name), batStartX, bottomY + barH * 0.75, batMaxW * 0.7, barH*0.18, '500', 'Roboto');
             c.fillText(`${match.nonStriker.runs}(${match.nonStriker.balls})`, batStartX + (batMaxW * 0.75), bottomY + barH * 0.75);
 
-            // 5. BOWLER (Right of Score)
+            // 5. BOWLER
             const bowlEndX = zoneRightStart - (pillW * 0.02);
             const bowlMaxW = (bowlEndX - zoneScoreEnd) - 10;
             c.textAlign = "right";
-            
-            // Name (Formatted)
             c.fillStyle = "white"; 
             fitTextAlignRight(c, formatPlayerName(match.bowler.name), bowlEndX, bottomY + barH * 0.35, bowlMaxW, barH*0.22, '700', 'Roboto');
             
-            // Figures
             const bBalls = match.bowler.balls !== undefined ? match.bowler.balls : 0;
             c.fillStyle = "#fbbf24"; c.font = `500 ${barH*0.16}px 'Roboto'`;
             c.fillText(`${match.bowler.wkts}-${match.bowler.runs} (${bBalls})`, bowlEndX, bottomY + barH * 0.55);
 
-            // 6. BUBBLES (Under Bowler Name - Inside the bar)
+            // 6. BUBBLES
             const bubbleR = barH * 0.12; 
-            const bubbleY = bottomY + barH * 0.8; // Bottom row
+            const bubbleY = bottomY + barH * 0.8; 
             let bx = bowlEndX - bubbleR; 
 
             if (match.currentOver && Array.isArray(match.currentOver)) {
                 const last5 = match.currentOver.slice(-5).reverse();
                 c.textAlign = "center"; c.textBaseline = "middle";
-                
                 last5.forEach(b => {
                     let txt = b.toString();
                     let upper = txt.toUpperCase(); 
-                    
                     let bgColor = "#f1f5f9"; let txtColor = "#0f172a"; 
                     let fontSize = bubbleR * 0.9;
-
                     if (txt === '4') { bgColor = "#3b82f6"; txtColor = "white"; }
                     else if (txt === '6') { bgColor = "#22c55e"; txtColor = "white"; }
                     else if (upper === 'W' || upper === 'OUT') { bgColor = "#ef4444"; txtColor = "white"; }
                     else if (upper.includes('WD') || upper.includes('NB')) { 
                         bgColor = "#fbbf24"; txtColor = "black"; fontSize = bubbleR * 0.6;
                     }
-
                     c.beginPath(); c.arc(bx, bubbleY, bubbleR, 0, Math.PI * 2); 
                     c.fillStyle = bgColor; c.fill();
                     c.fillStyle = txtColor; c.font = `700 ${fontSize}px 'Roboto'`; 
                     c.fillText(txt, bx, bubbleY);
-                    
                     bx -= (bubbleR * 2.2); 
                 });
                 c.textBaseline = "alphabetic";
