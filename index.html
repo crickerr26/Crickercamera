@@ -16,6 +16,7 @@
         
         #app-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
         
+        /* VIDEO: Hidden opacity but active for recording */
         #video-source { 
             position: absolute; top: 0; left: 0; 
             width: 100%; height: 100%; 
@@ -295,61 +296,58 @@
                 c.textBaseline = "alphabetic";
             }
 
-            // --- 5. CENTER BLOCK (UPDATED ALIGNMENT) ---
+            // --- 5. CENTER BLOCK ---
             if (match.target > 0) {
                 // *** SECOND INNINGS ***
                 c.textAlign = "right";
                 c.fillStyle = "#ffcc00"; c.font = `400 ${barH * 0.55}px 'Anton'`;
-                // Increased gap from divider (centerX - 50)
-                c.fillText(`${match.score}/${match.wickets}`, centerX - 50, bottomY + barH * 0.65);
+                c.fillText(`${match.score}/${match.wickets}`, centerX - 25, bottomY + barH * 0.65);
                 
                 c.fillStyle = "white"; c.font = `500 ${barH*0.16}px 'Apple SD Gothic Neo'`;
-                c.fillText(`OVERS ${match.overs}.${match.balls}`, centerX - 50, bottomY + barH * 0.85);
+                c.fillText(`OVERS ${match.overs}.${match.balls}`, centerX - 25, bottomY + barH * 0.85);
 
-                drawVerticalLine(centerX); 
+                drawVerticalLine(centerX - 10); 
 
-                // RIGHT SIDE - TARGET BLOCK (Perfect Alignment)
+                // TARGET BLOCK (Perfectly Aligned)
                 c.textAlign = "left";
-                const startX = centerX + 20; 
+                const startX = centerX + 15; 
 
-                // ROW 1: "TO WIN" (Yellow, Bold)
+                // ROW 1
                 c.fillStyle = "#ffcc00"; 
                 c.font = `700 ${barH * 0.20}px 'Apple SD Gothic Neo'`;
                 c.fillText("TO WIN", startX, bottomY + barH * 0.35);
 
-                // ROW 2: "22 / 13 BALLS" (White/Grey Mixed)
+                // ROW 2
                 const runsNeeded = match.target - match.score;
                 const ballsBowled = (match.overs * 6) + match.balls;
                 const ballsRem = (match.totalOvers * 6) - ballsBowled;
                 
                 let cursorX = startX;
 
-                // "22" (White Bold)
+                // 22 (White Bold)
                 c.fillStyle = "white";
                 c.font = `700 ${barH * 0.35}px 'Apple SD Gothic Neo'`;
                 c.fillText(runsNeeded, cursorX, bottomY + barH * 0.62);
                 cursorX += c.measureText(runsNeeded).width + 6;
 
-                // "/" (White Bold)
+                // / (White Bold)
                 c.fillText("/", cursorX, bottomY + barH * 0.62);
                 cursorX += c.measureText("/").width + 6;
 
-                // "13" (Grey Bold)
+                // 13 (Grey Bold)
                 c.fillStyle = "#9ca3af"; 
                 c.font = `700 ${barH * 0.35}px 'Apple SD Gothic Neo'`;
                 c.fillText(ballsRem, cursorX, bottomY + barH * 0.62);
                 cursorX += c.measureText(ballsRem).width + 8;
 
-                // "BALLS" (Grey Bold Smaller)
+                // BALLS (Grey Bold Small)
                 c.font = `700 ${barH * 0.20}px 'Apple SD Gothic Neo'`;
                 c.fillText("BALLS", cursorX, bottomY + barH * 0.62);
 
-                // ROW 3: TARGET & RATES (Grey Small)
+                // ROW 3
                 const crr = ballsBowled > 0 ? (match.score / (ballsBowled/6)).toFixed(1) : "0.0";
                 const rrr = ballsRem > 0 ? (runsNeeded / (ballsRem/6)).toFixed(1) : runsNeeded;
-                
-                c.fillStyle = "#9ca3af"; 
-                c.font = `500 ${barH * 0.13}px 'Apple SD Gothic Neo'`;
+                c.fillStyle = "#9ca3af"; c.font = `500 ${barH * 0.13}px 'Apple SD Gothic Neo'`;
                 c.fillText(`TARGET ${match.target} - CRR ${crr} - RRR ${rrr}`, startX, bottomY + barH * 0.85);
 
             } else {
@@ -424,15 +422,30 @@
                 c.fillStyle = "#cbd5e1"; c.font = `500 ${cardH * 0.08}px 'Apple SD Gothic Neo'`; c.fillText(match.pom.stats, w/2, cardY + cardH * 0.92);
             }
         }
+        
+        // --- NEW OPTIMIZED RECORDING SETTINGS ---
         function toggleRecording() {
             if(isRecording) { recorder.stop(); isRecording = false; document.getElementById('rec-button').classList.remove('recording'); }
             else {
                 const stream = canvas.captureStream(60); 
                 if(video.srcObject) { const audioTracks = video.srcObject.getAudioTracks(); if(audioTracks.length > 0) stream.addTrack(audioTracks[0]); }
-                let options = { mimeType: 'video/mp4', videoBitsPerSecond: 25000000 };
-                if(!MediaRecorder.isTypeSupported(options.mimeType)) { options = { mimeType: 'video/webm;codecs=vp9', videoBitsPerSecond: 25000000 }; }
+                
+                // 12 Mbps: Excellent quality, smooth frame rate for mobile encoders
+                let options = { mimeType: 'video/webm;codecs=h264', videoBitsPerSecond: 12000000 };
+                
+                if(!MediaRecorder.isTypeSupported(options.mimeType)) { 
+                    options = { mimeType: 'video/webm;codecs=vp9', videoBitsPerSecond: 12000000 }; 
+                }
+                if(!MediaRecorder.isTypeSupported(options.mimeType)) { 
+                    options = { mimeType: 'video/webm', videoBitsPerSecond: 12000000 }; 
+                }
+                if(!MediaRecorder.isTypeSupported(options.mimeType)) { 
+                    options = { mimeType: 'video/mp4', videoBitsPerSecond: 12000000 }; 
+                }
+
                 try { recorder = new MediaRecorder(stream, options); }
                 catch(e) { console.warn("Fallback"); recorder = new MediaRecorder(stream); }
+                
                 chunks = []; recorder.ondataavailable = e => { if(e.data.size) chunks.push(e.data); };
                 recorder.onstop = saveVideo; recorder.start();
                 isRecording = true; document.getElementById('rec-button').classList.add('recording');
