@@ -1,88 +1,91 @@
-\<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Live Broadcast</title>
+    <title>Pro Broadcast Unit</title>
     
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
     
-    <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;700&family=Roboto:wght@400;500;700;900&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Teko:wght@300;400;500;600;700&family=Roboto:wght@400;500;700;900&display=swap" rel="stylesheet">
     
     <style>
-        /* --- RESET --- */
+        /* --- RESET & BASE --- */
         * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; -webkit-user-select: none; }
         body { background-color: #000; overflow: hidden; font-family: 'Roboto', sans-serif; }
 
-        /* --- LAYOUT CONTAINERS --- */
+        /* --- CONTAINER --- */
         #app-container { position: relative; width: 100vw; height: 100vh; background: #000; }
         
-        /* Video & Canvas stack */
+        /* Video & Canvas Layers */
         #video-source { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; z-index: 1; }
         #broadcast-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: contain; z-index: 2; }
 
-        /* --- UI ELEMENTS --- */
+        /* --- HUD ELEMENTS --- */
+        /* Top Left Live Pill */
         #status-pill {
-            position: absolute; top: 20px; left: 20px; z-index: 10;
-            background: rgba(0, 0, 0, 0.7); padding: 6px 16px; border-radius: 50px;
-            color: #4ade80; font-size: 12px; font-weight: 900; letter-spacing: 1px;
-            border: 1px solid rgba(74, 222, 128, 0.3); display: flex; align-items: center; gap: 6px;
-            backdrop-filter: blur(4px);
+            position: absolute; top: 25px; left: 25px; z-index: 10;
+            background: linear-gradient(90deg, #dc2626 0%, #991b1b 100%);
+            padding: 4px 12px; border-radius: 4px;
+            color: white; font-size: 14px; font-weight: 900; letter-spacing: 1px;
+            font-family: 'Roboto', sans-serif;
+            box-shadow: 0 4px 15px rgba(220, 38, 38, 0.4);
+            display: flex; align-items: center; gap: 8px;
+            text-transform: uppercase;
         }
-        .live-dot { width: 8px; height: 8px; background: #4ade80; border-radius: 50%; animation: blink 1s infinite; }
+        .live-dot { width: 8px; height: 8px; background: white; border-radius: 50%; animation: blink 1.5s infinite; }
 
+        /* Top Right Rec Button */
         #rec-button {
-            position: absolute; top: 20px; right: 20px; z-index: 10;
-            background: rgba(220, 38, 38, 0.2); border: 1px solid rgba(220, 38, 38, 0.5);
+            position: absolute; top: 25px; right: 25px; z-index: 10;
+            background: rgba(0, 0, 0, 0.4); border: 1px solid rgba(255, 255, 255, 0.3);
             padding: 6px 16px; border-radius: 50px; color: white;
-            font-size: 12px; font-weight: 900; letter-spacing: 1px;
+            font-size: 12px; font-weight: 700; letter-spacing: 1px;
             display: flex; align-items: center; gap: 8px; cursor: pointer;
-            backdrop-filter: blur(4px); transition: all 0.2s;
+            backdrop-filter: blur(8px); transition: all 0.2s;
         }
         #rec-dot { width: 10px; height: 10px; background: #ef4444; border-radius: 50%; }
-        .recording { background: rgba(220, 38, 38, 0.9) !important; color: white; box-shadow: 0 0 15px rgba(220, 38, 38, 0.5); }
+        .recording { background: rgba(220, 38, 38, 0.9) !important; border-color: #ef4444 !important; }
         .recording #rec-dot { animation: pulse 1s infinite; background: white; }
 
         /* --- SETUP SCREEN --- */
         #setup-screen {
             position: absolute; inset: 0; z-index: 50;
-            background: radial-gradient(circle at center, #1e293b 0%, #0f172a 100%);
+            background: radial-gradient(circle at center, #0f172a 0%, #000000 100%);
             display: flex; flex-direction: column; align-items: center; justify-content: center;
         }
-        .input-group { margin-bottom: 2rem; text-align: center; }
         .input-field {
             background: rgba(255,255,255,0.05); border: 2px solid rgba(255,255,255,0.1);
-            color: white; font-size: 3rem; text-align: center; font-weight: 900; letter-spacing: 0.5rem;
-            width: 280px; padding: 1rem; border-radius: 1rem; outline: none; transition: all 0.3s;
-            font-family: 'Oswald', sans-serif;
+            color: #60a5fa; font-size: 4rem; text-align: center; font-weight: 700; letter-spacing: 0.5rem;
+            width: 320px; padding: 1rem; border-radius: 1rem; outline: none; transition: all 0.3s;
+            font-family: 'Teko', sans-serif; margin-bottom: 2rem;
         }
-        .input-field:focus { border-color: #3b82f6; box-shadow: 0 0 30px rgba(59, 130, 246, 0.3); }
-        
+        .input-field:focus { border-color: #3b82f6; box-shadow: 0 0 40px rgba(59, 130, 246, 0.2); }
         .start-btn {
             background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
-            color: white; border: none; padding: 1rem 3rem; border-radius: 1rem;
-            font-size: 1.2rem; font-weight: 800; letter-spacing: 1px;
-            cursor: pointer; box-shadow: 0 10px 20px rgba(0,0,0,0.3);
-            transition: transform 0.1s;
+            color: white; border: none; padding: 1rem 4rem; border-radius: 50px;
+            font-size: 1.1rem; font-weight: 800; letter-spacing: 2px;
+            cursor: pointer; box-shadow: 0 10px 30px rgba(37, 99, 235, 0.3);
+            transition: transform 0.1s; text-transform: uppercase;
         }
         .start-btn:active { transform: scale(0.95); }
 
-        /* --- ROTATE WARNING (LANDSCAPE LOCK) --- */
+        /* --- LANDSCAPE WARNING --- */
         #portrait-warning {
             position: fixed; inset: 0; z-index: 100;
-            background: #0f172a; color: white;
+            background: #000; color: white;
             display: none; flex-direction: column; align-items: center; justify-content: center;
             text-align: center; padding: 20px;
         }
-        .rotate-icon { font-size: 4rem; margin-bottom: 1rem; animation: rotatePhone 2s infinite; }
+        .rotate-icon { font-size: 4rem; margin-bottom: 1rem; color: #3b82f6; animation: rotatePhone 2s infinite; }
 
         @media (orientation: portrait) {
             #portrait-warning { display: flex !important; }
             #app-container { display: none; }
         }
 
-        @keyframes blink { 50% { opacity: 0.4; } }
+        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
         @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(0.8); } 100% { transform: scale(1); } }
         @keyframes rotatePhone { 0%, 10% { transform: rotate(0deg); } 40%, 60% { transform: rotate(-90deg); } 90%, 100% { transform: rotate(0deg); } }
     </style>
@@ -91,26 +94,20 @@
 
     <div id="portrait-warning">
         <div class="rotate-icon">⟳</div>
-        <h2 style="font-weight: 900; font-size: 1.5rem; margin-bottom: 10px;">ROTATE DEVICE</h2>
-        <p style="color: #94a3b8;">This scoreboard requires<br>LANDSCAPE mode.</p>
+        <h2 style="font-family: 'Teko'; font-size: 2.5rem; text-transform: uppercase;">Rotate Device</h2>
+        <p style="color: #64748b; font-family: 'Roboto';">Broadcast mode requires landscape view.</p>
     </div>
 
     <div id="setup-screen">
-        <div style="margin-bottom: 30px; text-align: center;">
-            <div style="font-size: 4rem; margin-bottom: 10px;">🎥</div>
-            <h1 style="font-family: 'Oswald'; text-transform: uppercase; font-size: 1.5rem; letter-spacing: 2px; color: #60a5fa;">Broadcast Unit</h1>
-        </div>
-        
-        <div class="input-group">
-            <p style="color: #94a3b8; font-size: 0.8rem; font-weight: bold; margin-bottom: 10px; text-transform: uppercase;">Enter Match ID</p>
-            <input type="text" id="match-id" class="input-field" placeholder="0000" maxlength="4" inputmode="numeric">
-        </div>
-        
-        <button onclick="connectToMatch()" class="start-btn">CONNECT CAMERA</button>
+        <h1 style="font-family: 'Teko'; font-size: 3rem; color: white; margin-bottom: 0.5rem; letter-spacing: 2px;">BROADCAST UNIT</h1>
+        <p style="color: #94a3b8; font-size: 0.9rem; font-weight: bold; margin-bottom: 1rem; text-transform: uppercase; letter-spacing: 1px;">Enter Match ID</p>
+        <input type="text" id="match-id" class="input-field" placeholder="0000" maxlength="4" inputmode="numeric">
+        <button onclick="connectToMatch()" class="start-btn">Start Camera</button>
     </div>
 
     <div id="app-container" style="display: none;">
-        <div id="status-pill"><div class="live-dot"></div> LIVE SYNC</div>
+        <div id="status-pill"><div class="live-dot"></div> LIVE</div>
+        
         <div id="rec-button" onclick="toggleRecording()"><div id="rec-dot"></div> REC</div>
         
         <video id="video-source" autoplay playsinline muted></video>
@@ -118,67 +115,71 @@
     </div>
 
     <script>
-        // --- FIREBASE CONFIG ---
+        // --- FIREBASE INIT ---
         const firebaseConfig = { apiKey: "AIzaSyBqcD59IAPpKqk98oDZkgzgkoVZ8b8LGgY", authDomain: "livecricketscoring-92087.firebaseapp.com", databaseURL: "https://livecricketscoring-92087-default-rtdb.firebaseio.com", projectId: "livecricketscoring-92087", storageBucket: "livecricketscoring-92087.firebasestorage.app", messagingSenderId: "522927197627", appId: "1:522927197627:web:f1df5db736cae96893089e" };
         if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore();
 
-        // --- GLOBAL STATE ---
+        // --- STATE ---
         let match = { 
             t1: "HOME", t2: "AWAY", score: 0, wickets: 0, overs: 0, balls: 0, 
             striker: { name: "", runs: 0, balls: 0 }, 
             nonStriker: { name: "", runs: 0, balls: 0 }, 
             bowler: { name: "", wkts: 0, runs: 0, balls: 0 }, 
-            currentOver: [] 
+            currentOver: [], target: 0 
         };
         
-        // Asset Cache
-        let team1Logo = null;
-        let team2Logo = null;
+        let team1Logo = null, team2Logo = null;
         let lastActionId = null, animType = null, animTime = 0;
         
-        // Canvas & Video
+        // --- ELEMENTS ---
         const video = document.getElementById('video-source');
         const canvas = document.getElementById('broadcast-canvas');
         const ctx = canvas.getContext('2d');
         let recorder, chunks = [], isRecording = false;
 
-        // --- INIT ---
+        // --- STARTUP ---
         window.onload = function() {
-            // Auto-connect if ID is in URL
             const params = new URLSearchParams(window.location.search);
             if(params.has('id')) {
                 document.getElementById('match-id').value = params.get('id');
                 connectToMatch();
             }
-            
-            // Handle Resize
             window.addEventListener('resize', resizeCanvas);
         };
 
+        // --- HIGH DPI SCALING (CRISP TEXT) ---
         function resizeCanvas() {
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
+            const dpr = window.devicePixelRatio || 1;
+            canvas.width = window.innerWidth * dpr;
+            canvas.height = window.innerHeight * dpr;
+            ctx.scale(dpr, dpr);
+            canvas.style.width = window.innerWidth + 'px';
+            canvas.style.height = window.innerHeight + 'px';
         }
 
         function connectToMatch() {
             const id = document.getElementById('match-id').value;
-            if(!id) return alert("Please enter a Match ID");
+            if(!id) return alert("Please enter Match ID");
 
-            // Request Camera
-            navigator.mediaDevices.getUserMedia({ 
-                video: { facingMode: "environment", width: { ideal: 1920 }, height: { ideal: 1080 } }, 
+            // Request MAX Video Quality (4K prefered, fallback to 1080p)
+            const constraints = { 
+                video: { 
+                    facingMode: "environment", 
+                    width: { ideal: 3840 }, 
+                    height: { ideal: 2160 } 
+                }, 
                 audio: true 
-            }).then(stream => {
+            };
+
+            navigator.mediaDevices.getUserMedia(constraints)
+            .then(stream => {
                 video.srcObject = stream;
                 document.getElementById('setup-screen').style.display = 'none';
                 document.getElementById('app-container').style.display = 'block';
+                
                 resizeCanvas();
-                
-                // Start Loop
                 requestAnimationFrame(renderLoop);
-                
-                // Start Listeners
                 listenToDB(id);
             }).catch(e => alert("Camera Error: " + e.message));
         }
@@ -189,7 +190,7 @@
                     const data = doc.data();
                     match = data;
                     
-                    // Handle Logos (If data URIs are sent)
+                    // Logo Caching
                     if(data.t1Logo && (!team1Logo || team1Logo.src !== data.t1Logo)) {
                         team1Logo = new Image(); team1Logo.src = data.t1Logo;
                     }
@@ -197,7 +198,7 @@
                         team2Logo = new Image(); team2Logo.src = data.t2Logo;
                     }
                     
-                    // Handle Animations
+                    // Trigger Animations
                     if (data.lastAction && data.lastAction.id !== lastActionId) {
                         lastActionId = data.lastAction.id;
                         triggerAnim(data.lastAction.type);
@@ -206,174 +207,190 @@
             });
         }
 
-        // --- RENDER LOOP ---
+        // --- MAIN RENDER LOOP ---
         function renderLoop() {
-            // 1. Clear & Draw Video
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            // (Video is behind canvas, so no need to drawImage if using CSS layering, 
-            // BUT for recording we must draw it)
-            if(isRecording) ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            // Get Logic Dimensions (CSS pixels)
+            const w = window.innerWidth;
+            const h = window.innerHeight;
 
-            // 2. Draw HUD
-            drawScoreboard(ctx, canvas.width, canvas.height);
-            drawPopups(ctx, canvas.width, canvas.height);
+            ctx.clearRect(0, 0, w, h);
+            
+            // Draw Scoreboard
+            drawICCScoreboard(ctx, w, h);
+            
+            // Draw Popups
+            drawPopups(ctx, w, h);
 
             requestAnimationFrame(renderLoop);
         }
 
         // --- ICC SCOREBOARD PAINTER ---
-        function drawScoreboard(c, w, h) {
-            const barH = h * 0.16; // Height of the bar
-            const marginX = w * 0.04;
-            const bottomY = h - barH - (h * 0.05);
-
-            // --- FONTS ---
-            const fontBig = `900 ${barH * 0.35}px 'Oswald'`;
-            const fontMed = `700 ${barH * 0.22}px 'Roboto'`;
-            const fontSmall = `500 ${barH * 0.18}px 'Roboto'`;
-
-            // --- 1. GLASS BACKGROUND ---
-            // Main container pill
+        function drawICCScoreboard(c, w, h) {
+            // Layout Constants
+            const barH = h * 0.18; // Height of the scoreboard
+            const marginX = Math.max(20, w * 0.05); // Responsive margin
+            const bottomY = h - barH - (h * 0.05); // Lift from bottom
+            
             const pillW = w - (marginX * 2);
             const pillX = marginX;
-            
+
+            // --- 1. MAIN GLASS PANEL ---
             c.save();
-            // Gradient Dark Glass
             const grad = c.createLinearGradient(pillX, bottomY, pillX + pillW, bottomY);
-            grad.addColorStop(0, "rgba(15, 23, 42, 0.95)"); // Dark Slate
-            grad.addColorStop(0.5, "rgba(30, 41, 59, 0.9)");
-            grad.addColorStop(1, "rgba(15, 23, 42, 0.95)");
+            // Deep Blue/Purple ICC Theme
+            grad.addColorStop(0, "rgba(10, 20, 50, 0.95)"); 
+            grad.addColorStop(0.5, "rgba(25, 35, 70, 0.92)");
+            grad.addColorStop(1, "rgba(10, 20, 50, 0.95)");
             
-            c.shadowColor = "rgba(0,0,0,0.5)"; c.shadowBlur = 20;
-            drawRoundRect(c, pillX, bottomY, pillW, barH, 16);
-            c.fillStyle = grad;
-            c.fill();
+            c.shadowColor = "rgba(0,0,0,0.6)"; c.shadowBlur = 25;
+            drawRoundRect(c, pillX, bottomY, pillW, barH, 12);
+            c.fillStyle = grad; c.fill();
             
-            // Border stroke
-            c.strokeStyle = "rgba(255,255,255,0.1)"; c.lineWidth = 1;
-            c.stroke();
+            // Top Accent Line (Gold/Yellow)
+            c.beginPath();
+            c.moveTo(pillX + 12, bottomY);
+            c.lineTo(pillX + pillW - 12, bottomY);
+            c.lineWidth = 3; c.strokeStyle = "#fbbf24"; c.stroke();
             c.restore();
 
-            // --- 2. TEAM LOGOS & NAMES ---
-            const logoSize = barH * 0.7;
+            // --- 2. TEAMS (Logos & Names) ---
+            const logoSize = barH * 0.65;
             const logoY = bottomY + (barH - logoSize) / 2;
             
-            // Left Team (Batting)
-            drawTeamSection(c, match.t1, team1Logo, pillX + 20, logoY, logoSize, true);
-            
-            // Right Team (Bowling)
-            drawTeamSection(c, match.t2, team2Logo, pillX + pillW - 20 - logoSize, logoY, logoSize, false);
+            // Left Team
+            drawLogo(c, match.t1, team1Logo, pillX + 25, logoY, logoSize, true);
+            c.fillStyle = "white"; c.textAlign = "left"; c.font = `700 ${barH*0.25}px 'Teko'`;
+            c.fillText(match.t1, pillX + 35 + logoSize, bottomY + barH * 0.35);
 
-            // --- 3. CENTER SCORE BOARD (The Highlight) ---
-            const centerW = pillW * 0.25;
-            const centerX = pillX + (pillW - centerW) / 2;
-            
-            // Highlight Box
-            c.save();
-            const scoreGrad = c.createLinearGradient(centerX, bottomY, centerX, bottomY + barH);
-            scoreGrad.addColorStop(0, "#2563eb"); scoreGrad.addColorStop(1, "#1e40af");
-            
-            // Draw Center Shape (Trapezoid or Rect)
-            drawRoundRect(c, centerX, bottomY - 5, centerW, barH + 10, 8); // Pop out slightly
-            c.fillStyle = scoreGrad; c.fill();
-            // Top Shine
-            c.fillStyle = "rgba(255,255,255,0.1)"; c.fill();
-            c.restore();
+            // Right Team
+            drawLogo(c, match.t2, team2Logo, pillX + pillW - 25 - logoSize, logoY, logoSize, false);
+            c.textAlign = "right";
+            c.fillText(match.t2, pillX + pillW - 35 - logoSize, bottomY + barH * 0.35);
 
-            // Score Text
-            c.textAlign = "center"; c.fillStyle = "#fff";
-            c.font = `900 ${barH * 0.55}px 'Oswald'`;
-            c.fillText(`${match.score}/${match.wickets}`, centerX + centerW/2, bottomY + barH * 0.6);
+            // --- 3. CENTER SCORE AREA ---
+            const centerX = pillX + (pillW / 2);
+            const scoreFontSize = barH * 0.55;
             
-            // Overs Text
-            c.fillStyle = "#93c5fd"; // Light Blue
-            c.font = fontSmall;
-            c.fillText(`OVERS ${match.overs}.${match.balls}`, centerX + centerW/2, bottomY + barH * 0.85);
+            c.textAlign = "center"; 
             
-            // "LIVE" Badge
-            c.fillStyle = "#fbbf24"; c.font = `900 ${barH * 0.15}px 'Roboto'`;
-            c.fillText("● LIVE", centerX + centerW/2, bottomY + barH * 0.2);
+            // The Score
+            c.fillStyle = "white"; 
+            c.font = `700 ${scoreFontSize}px 'Teko'`;
+            c.shadowColor="rgba(0,0,0,0.5)"; c.shadowBlur=10;
+            c.fillText(`${match.score}/${match.wickets}`, centerX, bottomY + barH * 0.55);
+            c.shadowBlur=0; // Reset shadow
 
-            // --- 4. BATTING STATS (Left of Center) ---
-            const batAreaX = pillX + logoSize + 40;
-            const batAreaW = (centerX - batAreaX) - 20;
-            
-            c.textAlign = "left"; 
+            // Overs
+            c.fillStyle = "#94a3b8";
+            c.font = `500 ${barH*0.18}px 'Roboto'`;
+            c.fillText(`OVERS ${match.overs}.${match.balls}`, centerX, bottomY + barH * 0.85);
+
+            // --- 4. TARGET / 2ND INNINGS LOGIC ---
+            // If target exists, show equation instead of just "VS"
+            if(match.target && match.target > 0) {
+                const runsNeeded = match.target - match.score;
+                // Assuming standard T20/ODI overs (calculated from balls if totalOvers isn't passed, 
+                // but usually we want specific inputs. Here we estimate or show balls left)
+                // Since we don't have max overs in sync, we show balls if possible or just target.
+                
+                c.fillStyle = "#fbbf24"; // Gold color for importance
+                c.font = `700 ${barH*0.18}px 'Roboto'`;
+                
+                // Top Center Text
+                c.fillText(`TARGET: ${match.target}`, centerX, bottomY + barH * 0.2);
+                
+                // Logic for "Need X off Y" requires Balls Remaining.
+                // Assuming Scorer passes logic, but if not, we display simplified.
+                if(runsNeeded > 0) {
+                    c.fillStyle = "#60a5fa"; // Blue
+                    c.font = `600 ${barH*0.15}px 'Roboto'`;
+                    c.fillText(`NEED ${runsNeeded} RUNS TO WIN`, centerX, bottomY + barH * 0.98); 
+                    // This pushes it slightly below the main bar or at the very bottom edge
+                } else {
+                    c.fillStyle = "#4ade80"; c.fillText("SCORES LEVEL", centerX, bottomY + barH * 0.98);
+                }
+            }
+
+            // --- 5. BATSMEN (Left Center) ---
+            const batX = pillX + logoSize + 80;
+            c.textAlign = "left";
             
             // Striker
-            c.fillStyle = "#fff"; c.font = fontMed;
-            c.fillText(`► ${match.striker.name}`, batAreaX, bottomY + barH * 0.35);
-            c.textAlign = "right"; c.fillStyle = "#fbbf24";
-            c.fillText(`${match.striker.runs} (${match.striker.balls})`, batAreaX + batAreaW, bottomY + barH * 0.35);
+            c.fillStyle = "white"; c.font = `700 ${barH*0.22}px 'Roboto'`;
+            c.fillText(`► ${match.striker.name.substring(0, 12)}`, batX, bottomY + barH * 0.45);
+            c.fillStyle = "#fbbf24"; c.textAlign = "right";
+            c.fillText(`${match.striker.runs} (${match.striker.balls})`, batX + 160, bottomY + barH * 0.45);
 
             // Non-Striker
-            c.textAlign = "left"; c.fillStyle = "#94a3b8"; c.font = fontSmall;
-            c.fillText(match.nonStriker.name, batAreaX, bottomY + barH * 0.7);
+            c.textAlign = "left"; c.fillStyle = "#94a3b8"; c.font = `500 ${barH*0.18}px 'Roboto'`;
+            c.fillText(match.nonStriker.name.substring(0, 12), batX, bottomY + barH * 0.75);
             c.textAlign = "right";
-            c.fillText(`${match.nonStriker.runs} (${match.nonStriker.balls})`, batAreaX + batAreaW, bottomY + barH * 0.7);
+            c.fillText(`${match.nonStriker.runs} (${match.nonStriker.balls})`, batX + 160, bottomY + barH * 0.75);
 
-            // --- 5. BOWLING STATS (Right of Center) ---
-            const bowlAreaX = centerX + centerW + 20;
-            const bowlAreaW = (pillX + pillW - logoSize - 40) - bowlAreaX;
+            // --- 6. BOWLER (Right Center) ---
+            const bowlX = pillX + pillW - logoSize - 80;
+            c.textAlign = "right";
+            
+            c.fillStyle = "white"; c.font = `700 ${barH*0.22}px 'Roboto'`;
+            c.fillText(match.bowler.name.substring(0, 12), bowlX, bottomY + barH * 0.45);
+            
+            c.fillStyle = "#fbbf24"; c.textAlign = "left";
+            c.fillText(`${match.bowler.wkts}-${match.bowler.runs}`, bowlX - 100, bottomY + barH * 0.45);
 
-            c.textAlign = "left"; c.fillStyle = "#fff"; c.font = fontMed;
-            c.fillText(match.bowler.name, bowlAreaX, bottomY + barH * 0.35);
-            
-            c.textAlign = "right"; c.fillStyle = "#fbbf24";
-            c.fillText(`${match.bowler.wkts}-${match.bowler.runs}`, bowlAreaX + bowlAreaW, bottomY + barH * 0.35);
-            
-            // --- 6. CURRENT OVER BUBBLES ---
-            // Draw these under the bowler name
-            const bubbleR = barH * 0.12;
-            const bubbleY = bottomY + barH * 0.7;
-            let bubbleX = bowlAreaX + bubbleR;
+            // --- 7. "THIS OVER" BUBBLES ---
+            // Draw bubbles underneath the Bowler's name
+            const bubbleR = barH * 0.11;
+            const bubbleY = bottomY + barH * 0.75;
+            let bx = bowlX - 120; // Start position
 
             if (match.currentOver && Array.isArray(match.currentOver)) {
-                c.textAlign = "center"; c.textBaseline = "middle"; c.font = `bold ${bubbleR}px 'Roboto'`;
+                const last6 = match.currentOver.slice(-6);
+                c.textAlign = "center"; c.textBaseline = "middle"; 
                 
-                // Show last 6 balls only
-                const recentBalls = match.currentOver.slice(-6);
-                
-                recentBalls.forEach(b => {
-                    c.beginPath();
-                    c.arc(bubbleX, bubbleY, bubbleR, 0, Math.PI * 2);
-                    
-                    // Bubble Colors
-                    if (b === '4') c.fillStyle = "#3b82f6"; // Blue
-                    else if (b === '6') c.fillStyle = "#22c55e"; // Green
-                    else if (b === 'W') c.fillStyle = "#ef4444"; // Red
-                    else c.fillStyle = "#f1f5f9"; // White/Grey
+                last6.forEach(b => {
+                    let txt = b.toString();
+                    let bgColor = "#f1f5f9"; // Default White
+                    let txtColor = "#0f172a";
+                    let fontSize = bubbleR * 1.1;
 
-                    c.fill();
+                    // Specific Colors per Event
+                    if (txt === '4') { bgColor = "#3b82f6"; txtColor = "white"; }
+                    else if (txt === '6') { bgColor = "#22c55e"; txtColor = "white"; }
+                    else if (txt === 'W') { bgColor = "#ef4444"; txtColor = "white"; }
+                    else if (txt.includes('WD') || txt.includes('NB')) { 
+                        bgColor = "#f59e0b"; txtColor = "white"; // Orange for Extras
+                        fontSize = bubbleR * 0.8; // Smaller font for "WD"
+                    }
+
+                    c.beginPath();
+                    c.arc(bx, bubbleY, bubbleR, 0, Math.PI * 2);
+                    c.fillStyle = bgColor; c.fill();
                     
-                    // Text Color
-                    c.fillStyle = (b === '4' || b === '6' || b === 'W') ? "#fff" : "#0f172a";
-                    c.fillText(b, bubbleX, bubbleY);
+                    c.fillStyle = txtColor;
+                    c.font = `700 ${fontSize}px 'Roboto'`;
+                    c.fillText(txt, bx, bubbleY);
                     
-                    bubbleX += (bubbleR * 2.4);
+                    bx += (bubbleR * 2.5);
                 });
-                c.textBaseline = "alphabetic"; // Reset
+                c.textBaseline = "alphabetic";
             }
         }
 
-        function drawTeamSection(c, name, logoImg, x, y, size, isLeft) {
+        function drawLogo(c, name, img, x, y, s, isLeft) {
             c.save();
-            // Draw Circle Background
             c.beginPath();
-            c.arc(x + size/2, y + size/2, size/2, 0, Math.PI*2);
-            c.fillStyle = "#fff";
-            c.fill();
-            c.clip(); // Clip image to circle
-
-            if(logoImg) {
-                c.drawImage(logoImg, x, y, size, size);
+            c.arc(x + s/2, y + s/2, s/2, 0, Math.PI*2);
+            c.fillStyle = "white"; c.fill();
+            c.clip();
+            
+            if(img) {
+                c.drawImage(img, x, y, s, s);
             } else {
-                // Fallback: Initials
-                c.fillStyle = isLeft ? "#047857" : "#b91c1c"; // Green vs Red fallback
-                c.fillRect(x, y, size, size);
-                c.fillStyle = "#fff"; c.textAlign = "center"; c.textBaseline = "middle";
-                c.font = `bold ${size*0.4}px 'Roboto'`;
-                c.fillText(name.substring(0,2).toUpperCase(), x + size/2, y + size/2);
+                c.fillStyle = isLeft ? "#059669" : "#dc2626";
+                c.fillRect(x, y, s, s);
+                c.fillStyle = "white"; c.textAlign = "center"; c.textBaseline = "middle";
+                c.font = `bold ${s*0.5}px 'Roboto'`;
+                c.fillText(name.substring(0,2), x+s/2, y+s/2);
             }
             c.restore();
         }
@@ -396,52 +413,56 @@
         function drawPopups(c, w, h) {
             if (!animType) return;
             const now = Date.now();
-            const duration = 2500;
-            if (now - animTime > duration) { animType = null; return; }
+            if (now - animTime > 3000) { animType = null; return; }
 
             c.save();
             c.translate(w/2, h/2);
             
-            // Pop in effect
-            const progress = (now - animTime) / 300; 
-            const scale = progress < 1 ? (Math.sin(progress * Math.PI/2) * 1.2) : 1;
+            // Scale Effect
+            const t = (now - animTime) / 300; 
+            const scale = t < 1 ? (Math.sin(t * Math.PI/2) * 1.5) : 1.2;
             
             c.scale(scale, scale);
-            c.shadowColor = "rgba(0,0,0,0.8)"; c.shadowBlur = 30;
+            c.shadowColor = "rgba(0,0,0,0.8)"; c.shadowBlur = 40;
             c.textAlign = "center"; c.textBaseline = "middle";
-            c.font = `900 ${h * 0.35}px 'Oswald'`;
+            c.font = `900 ${h * 0.4}px 'Teko'`;
 
             if (animType === '4') { 
                 c.fillStyle = "#3b82f6"; c.fillText("FOUR", 0, 0); 
-                c.strokeStyle = "white"; c.lineWidth = 4; c.strokeText("FOUR", 0, 0);
+                c.strokeStyle = "white"; c.lineWidth = 3; c.strokeText("FOUR", 0, 0);
             }
             else if (animType === '6') { 
                 c.fillStyle = "#22c55e"; c.fillText("SIX", 0, 0);
-                c.strokeStyle = "white"; c.lineWidth = 4; c.strokeText("SIX", 0, 0);
+                c.strokeStyle = "white"; c.lineWidth = 3; c.strokeText("SIX", 0, 0);
             }
             else if (animType === 'W') { 
-                c.fillStyle = "#ef4444"; c.fillText("OUT", 0, 0);
-                c.strokeStyle = "white"; c.lineWidth = 4; c.strokeText("OUT", 0, 0);
+                c.fillStyle = "#ef4444"; c.fillText("WICKET", 0, 0);
+                c.strokeStyle = "white"; c.lineWidth = 3; c.strokeText("WICKET", 0, 0);
             }
-            
             c.restore();
         }
 
-        // --- RECORDING ---
+        // --- VIDEO RECORDING (MAX QUALITY) ---
         function toggleRecording() {
             if(isRecording) {
                 recorder.stop();
                 isRecording = false;
                 document.getElementById('rec-button').classList.remove('recording');
             } else {
-                // Combine Canvas + Audio
-                const stream = canvas.captureStream(30);
+                // Combine Canvas Stream with Audio
+                const stream = canvas.captureStream(60); // Record at 60 FPS
                 if(video.srcObject) {
                     const audioTracks = video.srcObject.getAudioTracks();
                     if(audioTracks.length > 0) stream.addTrack(audioTracks[0]);
                 }
                 
-                recorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+                // Try to use High Quality Codecs
+                let options = { mimeType: 'video/webm;codecs=vp9', videoBitsPerSecond: 8000000 };
+                if(!MediaRecorder.isTypeSupported(options.mimeType)) {
+                    options = { mimeType: 'video/webm' }; // Fallback
+                }
+                
+                recorder = new MediaRecorder(stream, options);
                 chunks = [];
                 recorder.ondataavailable = e => { if(e.data.size) chunks.push(e.data); };
                 recorder.onstop = saveVideo;
@@ -458,7 +479,7 @@
             const a = document.createElement('a');
             a.style.display = 'none';
             a.href = url;
-            a.download = `match_${Date.now()}.webm`;
+            a.download = `ICC_Broadcast_${Date.now()}.webm`;
             document.body.appendChild(a);
             a.click();
             setTimeout(() => { document.body.removeChild(a); window.URL.revokeObjectURL(url); }, 100);
