@@ -43,7 +43,7 @@
         }
         .live-dot { width: 8px; height: 8px; background: white; border-radius: 50%; animation: blink 1.5s infinite; }
 
-        /* RECORD BUTTON */
+        /* BUTTONS */
         #rec-button {
             position: absolute; top: 25px; right: 25px; z-index: 10;
             background: rgba(0, 0, 0, 0.4); border: 1px solid rgba(255, 255, 255, 0.3);
@@ -56,7 +56,6 @@
         .recording { background: rgba(220, 38, 38, 0.9) !important; border-color: #ef4444 !important; }
         .recording #rec-dot { animation: pulse 1s infinite; background: white; }
 
-        /* FACEBOOK LIVE BUTTON */
         #fb-button {
             position: absolute; top: 25px; right: 130px; z-index: 10;
             background: #1877f2; border: 1px solid rgba(255, 255, 255, 0.2);
@@ -69,9 +68,22 @@
         #fb-button:hover { background: #166fe5; transform: scale(1.05); }
         #fb-icon { width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; font-family: 'Anton', sans-serif; font-size: 14px; }
 
+        /* SCREENS */
         #setup-screen { position: absolute; inset: 0; z-index: 50; background: radial-gradient(circle at center, #0f172a 0%, #000000 100%); display: flex; flex-direction: column; align-items: center; justify-content: center; }
         .input-field { background: rgba(255,255,255,0.05); border: 2px solid rgba(255,255,255,0.1); color: #60a5fa; font-size: 4rem; text-align: center; font-weight: 700; letter-spacing: 0.5rem; width: 320px; padding: 1rem; border-radius: 1rem; outline: none; transition: all 0.3s; font-family: 'Anton', sans-serif; margin-bottom: 2rem; }
         .start-btn { background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%); color: white; border: none; padding: 1rem 4rem; border-radius: 50px; font-size: 1.1rem; font-weight: 800; letter-spacing: 2px; cursor: pointer; box-shadow: 0 10px 30px rgba(37, 99, 235, 0.3); text-transform: uppercase; }
+        
+        /* INSTRUCTION MODAL */
+        #fb-help-modal {
+            position: absolute; inset: 0; z-index: 60;
+            background: rgba(0,0,0,0.85); backdrop-filter: blur(5px);
+            display: flex; align-items: center; justify-content: center;
+        }
+        .modal-card {
+            background: #1e1e1e; width: 90%; max-width: 400px; padding: 25px; border-radius: 20px;
+            text-align: center; border: 1px solid #333; color: white;
+        }
+        .step-num { display: inline-block; width: 24px; height: 24px; background: #3b82f6; border-radius: 50%; color: white; font-weight: bold; font-size: 12px; line-height: 24px; margin-right: 10px; }
         
         @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
         @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(0.8); } 100% { transform: scale(1); } }
@@ -89,13 +101,30 @@
     <div id="app-container" style="display: none;">
         <div id="status-pill"><div class="live-dot"></div> LIVE</div>
         
-        <div id="fb-button" onclick="goLive()">
+        <div id="fb-button" onclick="showFbHelp()">
             <div id="fb-icon">f</div> FB LIVE
         </div>
 
         <div id="rec-button" onclick="toggleRecording()"><div id="rec-dot"></div> REC</div>
         <video id="video-source" autoplay playsinline muted></video>
         <canvas id="broadcast-canvas"></canvas>
+    </div>
+
+    <div id="fb-help-modal" style="display: none;">
+        <div class="modal-card">
+            <h2 style="font-family: 'Anton'; font-size: 24px; margin-bottom: 20px; color: #3b82f6;">HOW TO STREAM SCOREBOARD</h2>
+            <div style="text-align: left; font-size: 14px; color: #ccc; margin-bottom: 20px; line-height: 1.6;">
+                <p><span class="step-num">1</span> Facebook Live will open in a new popup.</p>
+                <p><span class="step-num">2</span> Select <b>"Select a video source"</b> -> <b>"Webcam"</b>.</p>
+                <p><span class="step-num">3</span> ⚠️ <b>IMPORTANT:</b> Do not use the default camera.</p>
+                <p><span class="step-num">4</span> Click <b>"Start Screen Share"</b> inside Facebook.</p>
+                <p><span class="step-num">5</span> Select the <b>"Chrome Tab"</b> named <b>"Pro Broadcast Unit"</b>.</p>
+            </div>
+            <div style="display: flex; gap: 10px;">
+                <button onclick="closeFbHelp()" style="flex: 1; padding: 12px; background: #333; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer;">CANCEL</button>
+                <button onclick="proceedToFb()" style="flex: 1; padding: 12px; background: #3b82f6; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer;">OPEN FACEBOOK</button>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -451,16 +480,22 @@
             }
         }
         
-        // --- FACEBOOK LIVE FIX ---
-        function goLive() {
-            // Fix for Safari "Too many redirects": Open in a specific named window with dimensions
+        // --- FB LIVE HANDLING ---
+        function showFbHelp() {
+            document.getElementById('fb-help-modal').style.display = 'flex';
+        }
+        function closeFbHelp() {
+            document.getElementById('fb-help-modal').style.display = 'none';
+        }
+        function proceedToFb() {
+            // Updated secure window open parameters for Safari
             const url = "https://www.facebook.com/live/producer";
             const win = window.open(url, "fb_live_window", "width=1280,height=720,menubar=no,toolbar=no,location=no,status=no");
-            
             if (win) {
                 win.focus();
+                closeFbHelp();
             } else {
-                alert("Please allow popups to open Facebook Live.");
+                alert("Please allow popups for this site to open Facebook Live.");
             }
         }
 
