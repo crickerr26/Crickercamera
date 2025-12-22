@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>Pro Broadcast Unit</title>
     
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
@@ -12,10 +12,24 @@
     
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; -webkit-user-select: none; }
-        body { background-color: #000; overflow: hidden; font-family: 'Roboto', sans-serif; }
-        #app-container { position: relative; width: 100vw; height: 100vh; background: #000; }
-        #video-source { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; z-index: 1; }
-        #broadcast-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: contain; z-index: 2; }
+        body, html { width: 100%; height: 100%; overflow: hidden; background: #000; font-family: 'Roboto', sans-serif; }
+        
+        #app-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+        
+        /* FORCE FULL SCREEN VIDEO */
+        #video-source { 
+            position: absolute; top: 0; left: 0; 
+            width: 100%; height: 100%; 
+            object-fit: cover; /* Ensures video fills screen, cropping edges if needed */
+            z-index: 1; 
+        }
+        
+        #broadcast-canvas { 
+            position: absolute; top: 0; left: 0; 
+            width: 100%; height: 100%; 
+            object-fit: cover; 
+            z-index: 2; 
+        }
 
         /* HUD ELEMENTS */
         #status-pill {
@@ -61,7 +75,7 @@
     <div id="app-container" style="display: none;">
         <div id="status-pill"><div class="live-dot"></div> LIVE</div>
         <div id="rec-button" onclick="toggleRecording()"><div id="rec-dot"></div> REC</div>
-        <video id="video-source" autoplay playsinline muted></video>
+        <video id="video-source" autoplay playsinline muted style="display:none;"></video>
         <canvas id="broadcast-canvas"></canvas>
     </div>
 
@@ -124,8 +138,31 @@
         function renderLoop() {
             const w = window.innerWidth;
             const h = window.innerHeight;
-            ctx.clearRect(0, 0, w, h);
             
+            // 1. DRAW VIDEO TO CANVAS (Fixes Full Screen Recording)
+            if (video.readyState === video.HAVE_ENOUGH_DATA) {
+                // Determine aspect ratios to mimic object-fit: cover
+                const vidRatio = video.videoWidth / video.videoHeight;
+                const screenRatio = w / h;
+                let drawW, drawH, drawX, drawY;
+
+                if (screenRatio > vidRatio) {
+                    drawW = w;
+                    drawH = w / vidRatio;
+                    drawX = 0;
+                    drawY = (h - drawH) / 2;
+                } else {
+                    drawW = h * vidRatio;
+                    drawH = h;
+                    drawX = (w - drawW) / 2;
+                    drawY = 0;
+                }
+                ctx.drawImage(video, drawX, drawY, drawW, drawH);
+            } else {
+                ctx.clearRect(0, 0, w, h);
+            }
+            
+            // 2. DRAW OVERLAYS
             if (match.matchStatus === "COMPLETE") {
                 drawMatchSummary(ctx, w, h);
             } else {
@@ -170,11 +207,11 @@
 
         // --- FIXED STRICT GRID LAYOUT ---
         function drawICCScoreboard(c, w, h) {
-            const barH = h * 0.13; // FIX 1: Slightly thinner bar (was 0.14)
+            const barH = h * 0.13; 
             const marginX = w * 0.02; 
             
-            // FIX 2: Moved UP significantly (12% margin instead of 5%)
-            const bottomY = h - barH - (h * 0.12); 
+            // --- FIX: LOWER SCOREBOARD POSITION (4% Margin) ---
+            const bottomY = h - barH - (h * 0.04); 
             
             const pillW = w - (marginX * 2);
             const pillX = marginX;
@@ -244,7 +281,6 @@
                 const crr = ballsBowled > 0 ? (match.score / (ballsBowled/6)).toFixed(1) : "0.0";
                 const rrr = ballsRem > 0 ? (runsNeeded / (ballsRem/6)).toFixed(1) : runsNeeded;
                 
-                // FIX 3: Moved Stats Y-Pos UP slightly (was 0.8, now 0.78)
                 c.fillStyle = "#94a3b8"; c.font = `500 ${barH * 0.12}px 'Roboto'`;
                 c.fillText(`RRR: ${rrr} | CRR: ${crr}`, centerX + 15, bottomY + barH * 0.78);
 
@@ -281,9 +317,9 @@
             c.fillStyle = "#fbbf24"; c.font = `500 ${barH*0.16}px 'Roboto'`;
             c.fillText(`${match.bowler.wkts}-${match.bowler.runs} (${bBalls})`, bowlEndX, bottomY + barH * 0.55);
 
-            // 6. BUBBLES (Fixed Y Pos)
+            // 6. BUBBLES
             const bubbleR = barH * 0.12; 
-            const bubbleY = bottomY + barH * 0.78; // Moved UP (was 0.8)
+            const bubbleY = bottomY + barH * 0.78; 
             let bx = bowlEndX - bubbleR; 
 
             if (match.currentOver && Array.isArray(match.currentOver)) {
@@ -331,6 +367,7 @@
             if(isRecording) { recorder.stop(); isRecording = false; document.getElementById('rec-button').classList.remove('recording'); }
             else {
                 const stream = canvas.captureStream(60); 
+                // Add Audio
                 if(video.srcObject) { const audioTracks = video.srcObject.getAudioTracks(); if(audioTracks.length > 0) stream.addTrack(audioTracks[0]); }
                 
                 let options = { mimeType: 'video/mp4', videoBitsPerSecond: 25000000 };
