@@ -16,24 +16,22 @@
         
         #app-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
         
-        /* VIDEO ELEMENT (Hidden but active for capture) */
         #video-source { 
             position: absolute; top: 0; left: 0; 
             width: 100%; height: 100%; 
             object-fit: cover; 
-            z-index: 0; /* Behind canvas */
-            opacity: 0; /* Invisible but active */
+            z-index: 0; 
+            opacity: 0; 
         }
         
-        /* CANVAS (The Viewfinder & Recorder) */
         #broadcast-canvas { 
             position: absolute; top: 0; left: 0; 
             width: 100%; height: 100%; 
             object-fit: cover; 
-            z-index: 2; /* On top */
+            z-index: 2; 
         }
 
-        /* HUD ELEMENTS */
+        /* HUD */
         #status-pill {
             position: absolute; top: 25px; left: 25px; z-index: 10;
             background: linear-gradient(90deg, #dc2626 0%, #991b1b 100%);
@@ -77,7 +75,6 @@
     <div id="app-container" style="display: none;">
         <div id="status-pill"><div class="live-dot"></div> LIVE</div>
         <div id="rec-button" onclick="toggleRecording()"><div id="rec-dot"></div> REC</div>
-        
         <video id="video-source" autoplay playsinline muted></video>
         <canvas id="broadcast-canvas"></canvas>
     </div>
@@ -87,7 +84,13 @@
         if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore();
 
-        let match = { t1: "", t2: "", score: 0, wickets: 0, overs: 0, balls: 0, striker: { name: "", runs: 0, balls: 0 }, nonStriker: { name: "", runs: 0, balls: 0 }, bowler: { name: "", wkts: 0, runs: 0, balls: 0 }, currentOver: [], target: 0, totalOvers: 0, matchStatus: "", winner: "", margin: "", pom: null };
+        let match = { 
+            t1: "HOME", t2: "AWAY", score: 0, wickets: 0, overs: 0, balls: 0, 
+            striker: { name: "", runs: 0, balls: 0 }, 
+            nonStriker: { name: "", runs: 0, balls: 0 }, 
+            bowler: { name: "", wkts: 0, runs: 0, balls: 0 }, 
+            currentOver: [], target: 0, totalOvers: 0, matchStatus: "", winner: "", margin: "", pom: null 
+        };
         let team1Logo = null, team2Logo = null;
         let lastActionId = null, animType = null, animTime = 0;
         
@@ -118,7 +121,6 @@
             const constraints = { video: { facingMode: "environment", width: { ideal: 3840 }, height: { ideal: 2160 } }, audio: true };
             navigator.mediaDevices.getUserMedia(constraints).then(stream => {
                 video.srcObject = stream;
-                // Force play
                 video.play();
                 document.getElementById('setup-screen').style.display = 'none';
                 document.getElementById('app-container').style.display = 'block';
@@ -132,7 +134,7 @@
             db.collection("live_matches").doc(id).onSnapshot(doc => {
                 if(doc.exists) {
                     const data = doc.data();
-                    match = data;
+                    match = { ...match, ...data };
                     if(data.t1Logo && (!team1Logo || team1Logo.src !== data.t1Logo)) { team1Logo = new Image(); team1Logo.src = data.t1Logo; }
                     if(data.t2Logo && (!team2Logo || team2Logo.src !== data.t2Logo)) { team2Logo = new Image(); team2Logo.src = data.t2Logo; }
                     if (data.lastAction && data.lastAction.id !== lastActionId) { lastActionId = data.lastAction.id; triggerAnim(data.lastAction.type); }
@@ -144,7 +146,6 @@
             const w = window.innerWidth;
             const h = window.innerHeight;
             
-            // 1. DRAW VIDEO FIRST
             if (video.readyState === video.HAVE_ENOUGH_DATA) {
                 const vidRatio = video.videoWidth / video.videoHeight;
                 const screenRatio = w / h;
@@ -159,7 +160,6 @@
                 ctx.clearRect(0, 0, w, h);
             }
             
-            // 2. DRAW OVERLAYS
             if (match.matchStatus === "COMPLETE") {
                 drawMatchSummary(ctx, w, h);
             } else {
@@ -167,6 +167,14 @@
                 drawPopups(ctx, w, h);
             }
             requestAnimationFrame(renderLoop);
+        }
+
+        function formatTeamName(name) {
+            if (!name) return "TEAM";
+            let formatted = name.toUpperCase();
+            formatted = formatted.replace(/\bCRICKET CLUB\b/g, "C.C");
+            formatted = formatted.replace(/\bCRICKET\b/g, "C.C");
+            return formatted;
         }
 
         function formatPlayerName(fullName) {
@@ -186,250 +194,236 @@
             const pillW = w - (marginX * 2);
             const pillX = marginX;
 
-            // 1. Background (Deep Navy)
             c.save();
             c.fillStyle = "#05081c"; 
-            
-            // Rounded Rect
             c.shadowColor = "rgba(0,0,0,0.6)"; c.shadowBlur = 12;
             drawRoundRect(c, pillX, bottomY, pillW, barH, 16);
             c.fill();
             
-            // Gold Accent Line Top
             c.beginPath(); c.moveTo(pillX + 20, bottomY); c.lineTo(pillX + pillW - 20, bottomY);
             c.lineWidth = 5; c.strokeStyle = "#ffcc00"; c.stroke();
             c.restore();
 
-            // --- GRID SETUP ---
-            const divLeft = pillX + (pillW * 0.22);
-            const divRight = pillX + (pillW * 0.78);
+            const divLeft = pillX + (pillW * 0.18);
+            const divRight = pillX + (pillW * 0.82);
             const centerX = pillX + (pillW * 0.5);
             
             const drawVerticalLine = (x) => {
-                c.beginPath(); 
-                c.moveTo(x, bottomY + barH * 0.2); 
-                c.lineTo(x, bottomY + barH * 0.8);
-                c.strokeStyle = "rgba(255,255,255,0.2)"; 
-                c.lineWidth = 1.5; 
-                c.stroke();
+                c.beginPath(); c.moveTo(x, bottomY + barH * 0.2); c.lineTo(x, bottomY + barH * 0.8);
+                c.strokeStyle = "rgba(255,255,255,0.2)"; c.lineWidth = 1.5; c.stroke();
             };
-
             drawVerticalLine(divLeft);
             drawVerticalLine(divRight);
 
-            const logoS = barH * 0.65;
+            const logoS = barH * 0.55; 
             const logoY = bottomY + (barH - logoS) / 2;
 
-            // --- 1. LEFT TEAM (ANTON Font) ---
-            drawLogo(c, match.t1, team1Logo, pillX + 15, logoY, logoS, true);
-            const t1NameX = pillX + 25 + logoS;
+            // 1. LEFT TEAM
+            drawLogo(c, match.t1 || "HOME", team1Logo, pillX + 15, logoY, logoS, true);
+            const t1NameX = pillX + 20 + logoS;
             c.textAlign = "left"; 
             c.fillStyle = "white"; 
-            fitText(c, match.t1.toUpperCase(), t1NameX, bottomY + barH * 0.42, (divLeft - t1NameX) - 10, barH * 0.30, '400', 'Anton');
-            c.fillStyle = "#6b7280"; c.font = `700 ${barH * 0.14}px 'Apple SD Gothic Neo'`; 
+            fitText(c, formatTeamName(match.t1 || "HOME"), t1NameX, bottomY + barH * 0.42, (divLeft - t1NameX) - 5, barH * 0.25, '400', 'Anton');
+            c.fillStyle = "#6b7280"; c.font = `700 ${barH * 0.12}px 'Apple SD Gothic Neo'`; 
             c.fillText("BATTING", t1NameX, bottomY + barH * 0.7);
 
-            // --- 2. RIGHT TEAM (ANTON Font) ---
-            drawLogo(c, match.t2, team2Logo, pillX + pillW - 15 - logoS, logoY, logoS, false);
-            const t2NameX = pillX + pillW - 25 - logoS;
+            // 2. RIGHT TEAM
+            drawLogo(c, match.t2 || "AWAY", team2Logo, pillX + pillW - 15 - logoS, logoY, logoS, false);
+            const t2NameX = pillX + pillW - 20 - logoS;
             c.textAlign = "right"; 
             c.fillStyle = "white"; 
-            fitText(c, match.t2.toUpperCase(), t2NameX, bottomY + barH * 0.42, (t2NameX - divRight) - 10, barH * 0.30, '400', 'Anton');
-            c.fillStyle = "#6b7280"; c.font = `700 ${barH * 0.14}px 'Apple SD Gothic Neo'`; 
+            fitText(c, formatTeamName(match.t2 || "AWAY"), t2NameX, bottomY + barH * 0.42, (t2NameX - divRight) - 5, barH * 0.25, '400', 'Anton');
+            c.fillStyle = "#6b7280"; c.font = `700 ${barH * 0.12}px 'Apple SD Gothic Neo'`; 
             c.fillText("BOWLING", t2NameX, bottomY + barH * 0.7);
 
-            // --- 3. BATTING STATS (Apple SD Gothic Neo Bold) ---
-            const batX = divLeft + 20; 
-            
+            // 3. BATTING STATS
+            const batX = divLeft + 15; 
+            const sName = match.striker && match.striker.name ? formatPlayerName(match.striker.name) : "-";
+            const nsName = match.nonStriker && match.nonStriker.name ? formatPlayerName(match.nonStriker.name) : "-";
+            const sRuns = match.striker ? match.striker.runs : 0;
+            const sBalls = match.striker ? match.striker.balls : 0;
+            const nsRuns = match.nonStriker ? match.nonStriker.runs : 0;
+            const nsBalls = match.nonStriker ? match.nonStriker.balls : 0;
+
             c.textAlign = "left";
-            c.fillStyle = "white"; c.font = `700 ${barH*0.22}px 'Apple SD Gothic Neo'`;
-            c.fillText(formatPlayerName(match.striker.name), batX, bottomY + barH * 0.42);
+            c.fillStyle = "white"; c.font = `700 ${barH*0.20}px 'Apple SD Gothic Neo'`; 
+            
+            const indSize = barH * 0.05; 
+            c.save(); c.beginPath(); c.moveTo(batX, bottomY + barH * 0.39); c.lineTo(batX, bottomY + barH * 0.39 + indSize); c.lineTo(batX + indSize, bottomY + barH * 0.39 + (indSize/2)); c.fillStyle = "white"; c.fill(); c.restore();
+
+            const nameWidth = c.measureText(sName).width;
+            c.fillText(sName, batX + indSize + 5, bottomY + barH * 0.42);
+            
             c.fillStyle = "#ffcc00"; 
-            c.fillText(`${match.striker.runs} (${match.striker.balls})`, batX + (pillW*0.08), bottomY + barH * 0.42);
+            const scoreX = Math.max(batX + indSize + 5 + nameWidth + 12, batX + (pillW*0.07)); 
+            c.fillText(`${sRuns} (${sBalls})`, scoreX, bottomY + barH * 0.42);
 
-            // Non-Striker (Smaller Font)
             c.fillStyle = "#9ca3af"; c.font = `700 ${barH*0.18}px 'Apple SD Gothic Neo'`;
-            c.fillText(formatPlayerName(match.nonStriker.name), batX, bottomY + barH * 0.75);
-            c.fillText(`${match.nonStriker.runs} (${match.nonStriker.balls})`, batX + (pillW*0.08), bottomY + barH * 0.75);
+            c.fillText(nsName, batX, bottomY + barH * 0.75);
+            c.fillText(`${nsRuns} (${nsBalls})`, batX + (pillW*0.07), bottomY + barH * 0.75);
 
-            // --- 4. BOWLING STATS (Apple SD Gothic Neo) ---
-            const bowlX = divRight - 20;
+            // 4. BOWLER STATS
+            const bowlX = divRight - 15;
             c.textAlign = "right";
-            
+            const bName = match.bowler && match.bowler.name ? formatPlayerName(match.bowler.name) : "-";
+            const bWkts = match.bowler ? match.bowler.wkts : 0;
+            const bRuns = match.bowler ? match.bowler.runs : 0;
+            const bBallsCount = match.bowler ? (match.bowler.balls !== undefined ? match.bowler.balls : 0) : 0;
+
             c.fillStyle = "white"; c.font = `700 ${barH*0.22}px 'Apple SD Gothic Neo'`;
-            c.fillText(formatPlayerName(match.bowler.name), bowlX, bottomY + barH * 0.35);
-            
-            const bBalls = match.bowler.balls !== undefined ? match.bowler.balls : 0;
+            c.fillText(bName, bowlX, bottomY + barH * 0.35);
             c.fillStyle = "#9ca3af"; c.font = `500 ${barH*0.14}px 'Apple SD Gothic Neo'`;
-            c.fillText(`${match.bowler.wkts}-${match.bowler.runs} (${bBalls})`, bowlX, bottomY + barH * 0.52);
+            c.fillText(`${bWkts}-${bRuns} (${bBallsCount})`, bowlX, bottomY + barH * 0.52);
 
-            // Bubbles
-            const bubbleR = barH * 0.12; 
-            const bubbleY = bottomY + barH * 0.8; 
-            let bx = bowlEndX - bubbleR; 
-
+            // Bubbles (Multi-Row logic)
             if (match.currentOver && Array.isArray(match.currentOver)) {
-                const last5 = match.currentOver.slice(-5).reverse();
+                const balls = match.currentOver;
+                let bubbleR = barH * 0.08; 
+                let spacing = bubbleR * 2.2;
+                const row1Y = bottomY + barH * 0.68;
+                const row2Y = bottomY + barH * 0.85;
+                const row1Balls = balls.slice(0, 6).reverse(); 
+                const row2Balls = balls.slice(6).reverse();    
+
                 c.textAlign = "center"; c.textBaseline = "middle";
-                last5.forEach(b => {
-                    let txt = b.toString();
-                    let upper = txt.toUpperCase(); 
-                    let bgColor = "#f1f5f9"; let txtColor = "#0f172a"; 
-                    let fontSize = bubbleR * 0.9;
-                    if (txt === '4') { bgColor = "#3b82f6"; txtColor = "white"; }
-                    else if (txt === '6') { bgColor = "#22c55e"; txtColor = "white"; }
-                    else if (upper === 'W' || upper === 'OUT') { bgColor = "#ef4444"; txtColor = "white"; }
-                    else if (upper.includes('WD') || upper.includes('NB')) { 
-                        bgColor = "#fbbf24"; txtColor = "black"; fontSize = bubbleR * 0.6;
-                    }
-                    c.beginPath(); c.arc(bx, bubbleY, bubbleR, 0, Math.PI * 2); 
-                    c.fillStyle = bgColor; c.fill();
-                    c.fillStyle = txtColor; c.font = `700 ${fontSize}px 'Roboto'`; 
-                    c.fillText(txt, bx, bubbleY);
-                    bx -= (bubbleR * 2.2); 
-                });
+                c.font = `700 ${bubbleR*0.9}px 'Roboto'`; 
+
+                let bx = bowlX - bubbleR;
+                row1Balls.forEach(b => { drawBubble(c, b, bx, row1Y, bubbleR); bx -= spacing; });
+                bx = bowlX - bubbleR;
+                row2Balls.forEach(b => { drawBubble(c, b, bx, row2Y, bubbleR); bx -= spacing; });
                 c.textBaseline = "alphabetic";
             }
 
-            // --- 5. CENTER BLOCK (ANTON for Score, Apple SD Gothic Neo for labels) ---
+            // --- 5. CENTER BLOCK (UPDATED ALIGNMENT) ---
             if (match.target > 0) {
                 // *** SECOND INNINGS ***
-                
-                // Left Part: Score
                 c.textAlign = "right";
-                c.fillStyle = "#ffcc00"; c.font = `400 ${barH * 0.65}px 'Anton'`;
-                c.fillText(`${match.score}/${match.wickets}`, centerX - 15, bottomY + barH * 0.60);
+                c.fillStyle = "#ffcc00"; c.font = `400 ${barH * 0.55}px 'Anton'`;
+                // Increased gap from divider (centerX - 50)
+                c.fillText(`${match.score}/${match.wickets}`, centerX - 50, bottomY + barH * 0.65);
                 
                 c.fillStyle = "white"; c.font = `500 ${barH*0.16}px 'Apple SD Gothic Neo'`;
-                c.fillText(`OVERS ${match.overs}.${match.balls}`, centerX - 15, bottomY + barH * 0.85);
+                c.fillText(`OVERS ${match.overs}.${match.balls}`, centerX - 50, bottomY + barH * 0.85);
 
-                // Vertical Divider
-                drawVerticalLine(centerX);
+                drawVerticalLine(centerX); 
 
-                // Right Part: Equation & Target
+                // RIGHT SIDE - TARGET BLOCK (Perfect Alignment)
                 c.textAlign = "left";
-                const startX = centerX + 15;
+                const startX = centerX + 20; 
 
-                // 1. "10 / 5 BALLS" (Anton for Numbers)
+                // ROW 1: "TO WIN" (Yellow, Bold)
+                c.fillStyle = "#ffcc00"; 
+                c.font = `700 ${barH * 0.20}px 'Apple SD Gothic Neo'`;
+                c.fillText("TO WIN", startX, bottomY + barH * 0.35);
+
+                // ROW 2: "22 / 13 BALLS" (White/Grey Mixed)
                 const runsNeeded = match.target - match.score;
                 const ballsBowled = (match.overs * 6) + match.balls;
                 const ballsRem = (match.totalOvers * 6) - ballsBowled;
+                
+                let cursorX = startX;
 
+                // "22" (White Bold)
                 c.fillStyle = "white";
-                c.font = `400 ${barH * 0.45}px 'Anton'`;
-                const rW = c.measureText(runsNeeded).width;
-                c.fillText(runsNeeded, startX, bottomY + barH * 0.45);
+                c.font = `700 ${barH * 0.35}px 'Apple SD Gothic Neo'`;
+                c.fillText(runsNeeded, cursorX, bottomY + barH * 0.62);
+                cursorX += c.measureText(runsNeeded).width + 6;
 
-                c.font = `400 ${barH * 0.35}px 'Anton'`; 
-                c.fillText("/", startX + rW + 3, bottomY + barH * 0.45);
-                const sW = c.measureText("/").width;
+                // "/" (White Bold)
+                c.fillText("/", cursorX, bottomY + barH * 0.62);
+                cursorX += c.measureText("/").width + 6;
 
-                c.font = `400 ${barH * 0.45}px 'Anton'`;
-                c.fillText(ballsRem, startX + rW + sW + 6, bottomY + barH * 0.45);
-                const bW = c.measureText(ballsRem).width;
+                // "13" (Grey Bold)
+                c.fillStyle = "#9ca3af"; 
+                c.font = `700 ${barH * 0.35}px 'Apple SD Gothic Neo'`;
+                c.fillText(ballsRem, cursorX, bottomY + barH * 0.62);
+                cursorX += c.measureText(ballsRem).width + 8;
 
+                // "BALLS" (Grey Bold Smaller)
                 c.font = `700 ${barH * 0.20}px 'Apple SD Gothic Neo'`;
-                c.fillText("BALLS", startX + rW + sW + bW + 9, bottomY + barH * 0.43);
+                c.fillText("BALLS", cursorX, bottomY + barH * 0.62);
 
-                // 2. "TO WIN" (Apple SD Gothic Neo Bold)
-                c.fillStyle = "#ffcc00"; 
-                c.font = `700 ${barH * 0.22}px 'Apple SD Gothic Neo'`;
-                c.fillText("TO WIN", startX, bottomY + barH * 0.68);
-
-                // 3. "TARGET ... CRR ... RRR" (Apple SD Gothic Neo)
+                // ROW 3: TARGET & RATES (Grey Small)
                 const crr = ballsBowled > 0 ? (match.score / (ballsBowled/6)).toFixed(1) : "0.0";
                 const rrr = ballsRem > 0 ? (runsNeeded / (ballsRem/6)).toFixed(1) : runsNeeded;
                 
-                c.fillStyle = "#9ca3af"; c.font = `500 ${barH * 0.12}px 'Apple SD Gothic Neo'`;
-                c.fillText(`TARGET ${match.target} • CRR ${crr} • RRR ${rrr}`, startX, bottomY + barH * 0.85);
+                c.fillStyle = "#9ca3af"; 
+                c.font = `500 ${barH * 0.13}px 'Apple SD Gothic Neo'`;
+                c.fillText(`TARGET ${match.target} - CRR ${crr} - RRR ${rrr}`, startX, bottomY + barH * 0.85);
 
             } else {
                 // *** FIRST INNINGS ***
                 c.textAlign = "center";
-                c.fillStyle = "#ffcc00"; c.font = `400 ${barH * 0.75}px 'Anton'`;
-                c.fillText(`${match.score}/${match.wickets}`, centerX, bottomY + barH * 0.60);
+                c.textBaseline = "middle"; 
+                c.fillStyle = "#ffcc00"; 
+                c.font = `400 ${barH * 0.60}px 'Anton'`; 
+                c.fillText(`${match.score}/${match.wickets}`, centerX, bottomY + barH * 0.42);
                 
                 c.fillStyle = "white"; c.font = `500 ${barH*0.18}px 'Apple SD Gothic Neo'`;
-                c.fillText(`OVERS ${match.overs}.${match.balls}`, centerX, bottomY + barH * 0.85);
+                c.fillText(`OVERS ${match.overs}.${match.balls}`, centerX, bottomY + barH * 0.78);
+                c.textBaseline = "alphabetic"; 
             }
         }
 
-        // --- HELPER: Right Align Fit ---
+        function drawBubble(c, b, x, y, r) {
+            let txt = b.toString(); let upper = txt.toUpperCase(); 
+            let bgColor = "#f1f5f9"; let txtColor = "#0f172a"; 
+            if (txt === '4') { bgColor = "#3b82f6"; txtColor = "white"; }
+            else if (txt === '6') { bgColor = "#22c55e"; txtColor = "white"; }
+            else if (upper.includes('W') && !upper.includes('WD')) { bgColor = "#ef4444"; txtColor = "white"; }
+            else if (upper.includes('WD') || upper.includes('NB')) { bgColor = "#fbbf24"; txtColor = "black"; }
+            c.beginPath(); c.arc(x, y, r, 0, Math.PI * 2); c.fillStyle = bgColor; c.fill();
+            c.fillStyle = txtColor; c.fillText(txt, x, y);
+        }
+
         function fitTextAlignRight(c, text, x, y, maxWidth, initialFontSize, weight, fontFace) {
             let fontSize = initialFontSize; c.font = `${weight} ${fontSize}px '${fontFace}'`;
             let width = c.measureText(text).width;
-            while (width > maxWidth && fontSize > (initialFontSize * 0.6)) {
-                fontSize -= 2;
-                c.font = `${weight} ${fontSize}px '${fontFace}'`;
-                width = c.measureText(text).width;
-            }
-            if (width > maxWidth) {
-                while (width > maxWidth && text.length > 0) { text = text.slice(0, -1); width = c.measureText(text + "...").width; }
-                text += "...";
-            }
+            while (width > maxWidth && fontSize > (initialFontSize * 0.6)) { fontSize -= 2; c.font = `${weight} ${fontSize}px '${fontFace}'`; width = c.measureText(text).width; }
+            if (width > maxWidth) { while (width > maxWidth && text.length > 0) { text = text.slice(0, -1); width = c.measureText(text + "...").width; } text += "..."; }
             c.fillText(text, x, y);
         }
-
         function fitText(c, text, x, y, maxWidth, initialFontSize, weight, fontFace) {
-            let fontSize = initialFontSize;
-            c.font = `${weight} ${fontSize}px '${fontFace}'`;
+            let fontSize = initialFontSize; c.font = `${weight} ${fontSize}px '${fontFace}'`;
             let width = c.measureText(text).width;
-            while (width > maxWidth && fontSize > (initialFontSize * 0.6)) {
-                fontSize -= 2;
-                c.font = `${weight} ${fontSize}px '${fontFace}'`;
-                width = c.measureText(text).width;
-            }
-            if (width > maxWidth) {
-                while (width > maxWidth && text.length > 0) { text = text.slice(0, -1); width = c.measureText(text + "...").width; }
-                text += "...";
-            }
+            while (width > maxWidth && fontSize > (initialFontSize * 0.6)) { fontSize -= 2; c.font = `${weight} ${fontSize}px '${fontFace}'`; width = c.measureText(text).width; }
+            if (width > maxWidth) { while (width > maxWidth && text.length > 0) { text = text.slice(0, -1); width = c.measureText(text + "...").width; } text += "..."; }
             c.fillText(text, x, y);
         }
-
-        // --- ANIMATIONS ---
-        function triggerAnim(type) { animType = type; animTime = Date.now(); }
-        function drawPopups(c, w, h) {
-            if (!animType) return;
-            const now = Date.now(); 
-            if (now - animTime > 3000) { animType = null; return; }
-            
-            c.save();
-            const startX = w * 0.05; 
-            const startY = h - (h * 0.16) - (h * 0.06); 
-            c.translate(startX, startY);
-            
-            const t = (now - animTime) / 300; 
-            const scale = t < 1 ? (Math.sin(t * Math.PI/2) * 1.1) : 1.0;
-            c.scale(scale, scale);
-            
-            c.textAlign = "left"; c.textBaseline = "bottom"; 
-            const fontSize = h * 0.08; 
-            c.font = `400 ${fontSize}px 'Anton'`;
-            
-            if (animType === '4') { c.fillStyle = "#3b82f6"; c.fillText("FOUR RUNS", 0, 0); }
-            else if (animType === '6') { c.fillStyle = "#22c55e"; c.fillText("SIX RUNS", 0, 0); }
-            else if (animType === 'W') { c.fillStyle = "#ef4444"; c.fillText("WICKET", 0, 0); }
-            
-            c.restore();
-        }
-
-        function drawDivider(c, x, y, h) {
-            c.beginPath(); c.moveTo(x, y); c.lineTo(x, y + h);
-            c.strokeStyle = "rgba(255,255,255,0.15)"; c.lineWidth = 1; c.stroke();
-        }
-
         function drawLogo(c, name, img, x, y, s, isLeft) {
             c.save(); c.beginPath(); c.arc(x + s/2, y + s/2, s/2, 0, Math.PI*2); c.fillStyle = "white"; c.fill(); c.clip();
-            if(img) { c.drawImage(img, x, y, s, s); } 
-            else { c.fillStyle = isLeft ? "#059669" : "#dc2626"; c.fillRect(x, y, s, s); c.fillStyle = "white"; c.textAlign = "center"; c.textBaseline = "middle"; c.font = `bold ${s*0.5}px 'Roboto'`; c.fillText(name.substring(0,2), x+s/2, y+s/2); }
-            c.restore();
+            if(img) { c.drawImage(img, x, y, s, s); } else { c.fillStyle = isLeft ? "#059669" : "#dc2626"; c.fillRect(x, y, s, s); c.fillStyle = "white"; c.textAlign = "center"; c.textBaseline = "middle"; c.font = `bold ${s*0.5}px 'Roboto'`; c.fillText(name.substring(0,2), x+s/2, y+s/2); } c.restore();
         }
-
         function drawRoundRect(c, x, y, w, h, r) {
             if (w < 2 * r) r = w / 2; if (h < 2 * r) r = h / 2;
             c.beginPath(); c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r); c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath();
         }
-
+        function triggerAnim(type) { animType = type; animTime = Date.now(); }
+        function drawPopups(c, w, h) {
+            if (!animType) return; const now = Date.now(); if (now - animTime > 3000) { animType = null; return; }
+            c.save(); const startX = w * 0.05; const startY = h - (h * 0.16) - (h * 0.06); c.translate(startX, startY);
+            const t = (now - animTime) / 300; const scale = t < 1 ? (Math.sin(t * Math.PI/2) * 1.1) : 1.0;
+            c.scale(scale, scale); c.textAlign = "left"; c.textBaseline = "bottom"; const fontSize = h * 0.08; c.font = `400 ${fontSize}px 'Anton'`;
+            if (animType === '4') { c.fillStyle = "#3b82f6"; c.fillText("FOUR RUNS", 0, 0); } else if (animType === '6') { c.fillStyle = "#22c55e"; c.fillText("SIX RUNS", 0, 0); } else if (animType === 'W') { c.fillStyle = "#ef4444"; c.fillText("WICKET", 0, 0); } c.restore();
+        }
+        function drawMatchSummary(c, w, h) {
+            const cardW = w * 0.6; const cardH = h * 0.5; const cardX = (w - cardW) / 2; const cardY = (h - cardH) / 2;
+            c.save(); const grad = c.createLinearGradient(cardX, cardY, cardX + cardW, cardY + cardH); grad.addColorStop(0, "#0f172a"); grad.addColorStop(1, "#1e293b");
+            c.shadowColor = "rgba(0,0,0,0.8)"; c.shadowBlur = 40; drawRoundRect(c, cardX, cardY, cardW, cardH, 20); c.fillStyle = grad; c.fill();
+            c.lineWidth = 4; c.strokeStyle = "#fbbf24"; c.stroke(); c.restore();
+            c.textAlign = "center"; c.textBaseline = "middle";
+            c.fillStyle = "#fbbf24"; c.font = `400 ${cardH * 0.15}px 'Anton'`; c.fillText("MATCH SUMMARY", w/2, cardY + cardH * 0.15);
+            c.fillStyle = "white"; c.font = `400 ${cardH * 0.25}px 'Anton'`; c.fillText(match.winner || "MATCH FINISHED", w/2, cardY + cardH * 0.35);
+            c.fillStyle = "#94a3b8"; c.font = `700 ${cardH * 0.1}px 'Apple SD Gothic Neo'`; c.fillText(match.margin || "", w/2, cardY + cardH * 0.5);
+            if (match.pom) {
+                c.beginPath(); c.moveTo(cardX + 50, cardY + cardH * 0.6); c.lineTo(cardX + cardW - 50, cardY + cardH * 0.6);
+                c.strokeStyle = "rgba(255,255,255,0.2)"; c.lineWidth = 2; c.stroke();
+                c.fillStyle = "#fbbf24"; c.font = `700 ${cardH * 0.08}px 'Apple SD Gothic Neo'`; c.fillText("PLAYER OF THE MATCH", w/2, cardY + cardH * 0.7);
+                c.fillStyle = "white"; c.font = `400 ${cardH * 0.15}px 'Anton'`; c.fillText(match.pom.name, w/2, cardY + cardH * 0.82);
+                c.fillStyle = "#cbd5e1"; c.font = `500 ${cardH * 0.08}px 'Apple SD Gothic Neo'`; c.fillText(match.pom.stats, w/2, cardY + cardH * 0.92);
+            }
+        }
         function toggleRecording() {
             if(isRecording) { recorder.stop(); isRecording = false; document.getElementById('rec-button').classList.remove('recording'); }
             else {
@@ -449,27 +443,6 @@
             const blob = new Blob(chunks, { type: mime }); const url = URL.createObjectURL(blob);
             const a = document.createElement('a'); a.style.display = 'none'; a.href = url; a.download = `ICC_Broadcast_${Date.now()}.${ext}`; 
             document.body.appendChild(a); a.click(); setTimeout(() => { document.body.removeChild(a); window.URL.revokeObjectURL(url); }, 100);
-        }
-        
-        // --- MATCH SUMMARY RENDERER ---
-        function drawMatchSummary(c, w, h) {
-            const cardW = w * 0.6; const cardH = h * 0.5; const cardX = (w - cardW) / 2; const cardY = (h - cardH) / 2;
-            c.save(); const grad = c.createLinearGradient(cardX, cardY, cardX + cardW, cardY + cardH);
-            grad.addColorStop(0, "#0f172a"); grad.addColorStop(1, "#1e293b");
-            c.shadowColor = "rgba(0,0,0,0.8)"; c.shadowBlur = 40;
-            drawRoundRect(c, cardX, cardY, cardW, cardH, 20); c.fillStyle = grad; c.fill();
-            c.lineWidth = 4; c.strokeStyle = "#fbbf24"; c.stroke(); c.restore();
-            c.textAlign = "center"; c.textBaseline = "middle";
-            c.fillStyle = "#fbbf24"; c.font = `400 ${cardH * 0.15}px 'Anton'`; c.fillText("MATCH SUMMARY", w/2, cardY + cardH * 0.15);
-            c.fillStyle = "white"; c.font = `400 ${cardH * 0.25}px 'Anton'`; c.fillText(match.winner || "MATCH FINISHED", w/2, cardY + cardH * 0.35);
-            c.fillStyle = "#94a3b8"; c.font = `700 ${cardH * 0.1}px 'Apple SD Gothic Neo'`; c.fillText(match.margin || "", w/2, cardY + cardH * 0.5);
-            if (match.pom) {
-                c.beginPath(); c.moveTo(cardX + 50, cardY + cardH * 0.6); c.lineTo(cardX + cardW - 50, cardY + cardH * 0.6);
-                c.strokeStyle = "rgba(255,255,255,0.2)"; c.lineWidth = 2; c.stroke();
-                c.fillStyle = "#fbbf24"; c.font = `700 ${cardH * 0.08}px 'Apple SD Gothic Neo'`; c.fillText("PLAYER OF THE MATCH", w/2, cardY + cardH * 0.7);
-                c.fillStyle = "white"; c.font = `400 ${cardH * 0.15}px 'Anton'`; c.fillText(match.pom.name, w/2, cardY + cardH * 0.82);
-                c.fillStyle = "#cbd5e1"; c.font = `500 ${cardH * 0.08}px 'Apple SD Gothic Neo'`; c.fillText(match.pom.stats, w/2, cardY + cardH * 0.92);
-            }
         }
     </script>
 </body>
