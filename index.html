@@ -63,6 +63,7 @@
         .recording { background: rgba(220, 38, 38, 0.9) !important; border-color: #ef4444 !important; }
         .recording #rec-dot { animation: pulse 1s infinite; background: white; }
 
+        /* FACEBOOK BUTTON */
         #fb-button {
             position: absolute; top: 25px; right: 130px;
             background: #1877f2; border: 1px solid rgba(255, 255, 255, 0.2);
@@ -75,13 +76,26 @@
         #fb-button:hover { background: #166fe5; transform: scale(1.05); }
         #fb-icon { width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; font-family: 'Anton', sans-serif; font-size: 14px; }
 
+        /* YOUTUBE BUTTON */
+        #yt-button {
+            position: absolute; top: 25px; right: 240px;
+            background: #FF0000; border: 1px solid rgba(255, 255, 255, 0.2);
+            padding: 6px 16px; border-radius: 50px; color: white;
+            font-size: 12px; font-weight: 700; letter-spacing: 1px;
+            display: flex; align-items: center; gap: 8px; cursor: pointer;
+            box-shadow: 0 4px 15px rgba(255, 0, 0, 0.4);
+            backdrop-filter: blur(8px); transition: all 0.2s;
+        }
+        #yt-button:hover { background: #cc0000; transform: scale(1.05); }
+        #yt-icon { width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; font-family: 'Anton', sans-serif; font-size: 10px; background: white; color: #FF0000; border-radius: 4px; padding: 2px; }
+
         /* SCREENS */
         #setup-screen { position: absolute; inset: 0; z-index: 50; background: radial-gradient(circle at center, #0f172a 0%, #000000 100%); display: flex; flex-direction: column; align-items: center; justify-content: center; }
         .input-field { background: rgba(255,255,255,0.05); border: 2px solid rgba(255,255,255,0.1); color: #60a5fa; font-size: 4rem; text-align: center; font-weight: 700; letter-spacing: 0.5rem; width: 320px; padding: 1rem; border-radius: 1rem; outline: none; transition: all 0.3s; font-family: 'Anton', sans-serif; margin-bottom: 2rem; }
         .start-btn { background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%); color: white; border: none; padding: 1rem 4rem; border-radius: 50px; font-size: 1.1rem; font-weight: 800; letter-spacing: 2px; cursor: pointer; box-shadow: 0 10px 30px rgba(37, 99, 235, 0.3); text-transform: uppercase; }
         
         /* INSTRUCTION MODAL */
-        #fb-help-modal {
+        .help-modal {
             position: absolute; inset: 0; z-index: 60;
             background: rgba(0,0,0,0.9); backdrop-filter: blur(8px);
             display: flex; align-items: center; justify-content: center;
@@ -113,39 +127,77 @@
     <div id="app-container" style="display: none;">
         <div id="controls-layer">
             <div id="status-pill" class="hud-item"><div class="live-dot"></div> LIVE</div>
-            <div id="fb-button" class="hud-item" onclick="showFbHelp()"><div id="fb-icon">f</div> FB LIVE</div>
+            
+            <div id="yt-button" class="hud-item" onclick="showYtHelp()">
+                <div id="yt-icon">▶</div> YT LIVE
+            </div>
+
+            <div id="fb-button" class="hud-item" onclick="showFbHelp()">
+                <div id="fb-icon">f</div> FB LIVE
+            </div>
+
             <div id="rec-button" class="hud-item" onclick="toggleRecording()"><div id="rec-dot"></div> REC</div>
         </div>
         <video id="video-source" autoplay playsinline muted></video>
         <canvas id="broadcast-canvas"></canvas>
     </div>
 
-    <div id="fb-help-modal" style="display: none;">
+    <div id="fb-help-modal" class="help-modal" style="display: none;">
         <div class="modal-card">
-            <h2 style="font-family: 'Anton'; font-size: 28px; margin-bottom: 25px; color: #3b82f6;">GO LIVE WITHOUT OBS</h2>
-            
+            <h2 style="font-family: 'Anton'; font-size: 28px; margin-bottom: 25px; color: #1877f2;">FACEBOOK LIVE SETUP</h2>
             <div style="margin-bottom: 25px;">
                 <div class="step-row">
-                    <div class="step-num">1</div>
-                    <div>Click <b>"OPEN FACEBOOK"</b> below (opens in new tab).</div>
+                    <div class="step-num" style="background:#1877f2">1</div>
+                    <div>Click <b>"OPEN FACEBOOK"</b> below.</div>
                 </div>
                 <div class="step-row">
-                    <div class="step-num">2</div>
-                    <div>Select <b>"Select a video source"</b> → <b>"Webcam"</b>.</div>
+                    <div class="step-num" style="background:#1877f2">2</div>
+                    <div>Select <b>"Webcam"</b> as video source.</div>
                 </div>
                 <div class="step-row" style="background: rgba(239, 68, 68, 0.1); padding: 10px; border-radius: 8px; border-left: 3px solid #ef4444;">
                     <div class="step-num" style="background: #ef4444;">3</div>
-                    <div><b>IMPORTANT:</b> Click <b>"Start Screen Share"</b>.<br>Do NOT use the default camera directly.</div>
+                    <div><b>IMPORTANT:</b> Click <b>"Start Screen Share"</b>.<br>Do NOT use the default camera.</div>
                 </div>
                 <div class="step-row">
-                    <div class="step-num">4</div>
-                    <div>Go to <b>"Chrome Tab"</b> → Select <b>"Pro Broadcast Unit"</b>.</div>
+                    <div class="step-num" style="background:#1877f2">4</div>
+                    <div>Select <b>"Chrome Tab"</b> → <b>"Pro Broadcast Unit"</b>.</div>
                 </div>
             </div>
-
             <div style="display: flex; gap: 10px;">
-                <button onclick="closeFbHelp()" style="flex: 1; padding: 14px; background: #333; color: white; border: none; border-radius: 10px; font-weight: bold; cursor: pointer;">CANCEL</button>
-                <button onclick="proceedToFb()" style="flex: 1; padding: 14px; background: #3b82f6; color: white; border: none; border-radius: 10px; font-weight: bold; cursor: pointer;">OPEN FACEBOOK</button>
+                <button onclick="closeHelp('fb')" style="flex: 1; padding: 14px; background: #333; color: white; border: none; border-radius: 10px; font-weight: bold; cursor: pointer;">CANCEL</button>
+                <button onclick="proceedToFb()" style="flex: 1; padding: 14px; background: #1877f2; color: white; border: none; border-radius: 10px; font-weight: bold; cursor: pointer;">OPEN FACEBOOK</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="yt-help-modal" class="help-modal" style="display: none;">
+        <div class="modal-card">
+            <h2 style="font-family: 'Anton'; font-size: 28px; margin-bottom: 15px; color: #FF0000;">YOUTUBE LIVE SETUP</h2>
+            <p style="color: #bbb; font-size: 13px; margin-bottom: 20px;">
+                ⚠️ YouTube's native website <b>does NOT support Screen Sharing</b> (only webcam). You must use <b>StreamYard (Free)</b> to broadcast this scoreboard without OBS.
+            </p>
+            
+            <div style="margin-bottom: 25px;">
+                <div class="step-row">
+                    <div class="step-num" style="background:#FF0000">1</div>
+                    <div>Click <b>"OPEN STREAMYARD"</b> below.</div>
+                </div>
+                <div class="step-row">
+                    <div class="step-num" style="background:#FF0000">2</div>
+                    <div>Login & Create a Broadcast -> <b>YouTube</b>.</div>
+                </div>
+                <div class="step-row">
+                    <div class="step-num" style="background:#FF0000">3</div>
+                    <div>Click <b>"Present"</b> -> <b>"Share Screen"</b>.</div>
+                </div>
+                <div class="step-row">
+                    <div class="step-num" style="background:#FF0000">4</div>
+                    <div>Select <b>"Chrome Tab"</b> → <b>"Pro Broadcast Unit"</b>.</div>
+                </div>
+            </div>
+            <div style="display: flex; gap: 10px;">
+                <button onclick="closeHelp('yt')" style="flex: 1; padding: 14px; background: #333; color: white; border: none; border-radius: 10px; font-weight: bold; cursor: pointer;">CANCEL</button>
+                <button onclick="proceedToStreamYard()" style="flex: 1; padding: 14px; background: #FF0000; color: white; border: none; border-radius: 10px; font-weight: bold; cursor: pointer;">OPEN STREAMYARD</button>
             </div>
         </div>
     </div>
@@ -346,7 +398,7 @@
             c.fillStyle = "#9ca3af"; c.font = `500 ${barH*0.14}px 'Apple SD Gothic Neo'`;
             c.fillText(`${bWkts}-${bRuns} (${bBallsCount})`, bowlX, bottomY + barH * 0.52);
 
-            // Bubbles
+            // Bubbles (Smart Resizing)
             if (match.currentOver && Array.isArray(match.currentOver)) {
                 const balls = match.currentOver;
                 let bubbleR = barH * 0.12; 
@@ -377,7 +429,7 @@
 
                 drawVerticalLine(centerX - 10); 
 
-                // --- TARGET BLOCK ---
+                // --- TARGET BLOCK (ADJUSTED Y) ---
                 c.textAlign = "left";
                 const startX = centerX + 15; 
 
@@ -386,7 +438,7 @@
                 c.font = `700 ${barH * 0.20}px 'Apple SD Gothic Neo'`;
                 c.fillText("TO WIN", startX, bottomY + barH * 0.28); 
 
-                // 2. EQUATION (22 RUNS in 13 BALLS)
+                // 2. EQUATION (Moved DOWN)
                 let cursorX = startX;
                 const runsNeeded = match.target - match.score;
                 const ballsBowled = (match.overs * 6) + match.balls;
@@ -394,25 +446,30 @@
                 
                 const eqY = bottomY + barH * 0.62; 
 
+                // "22"
                 c.fillStyle = "white";
                 c.font = `400 ${barH * 0.32}px 'Anton'`; 
                 c.fillText(runsNeeded, cursorX, eqY);
                 cursorX += c.measureText(runsNeeded).width + 5;
 
+                // "RUNS"
                 c.fillStyle = "#9ca3af"; 
                 c.font = `700 ${barH * 0.16}px 'Apple SD Gothic Neo'`;
                 c.fillText("RUNS", cursorX, eqY);
                 cursorX += c.measureText("RUNS").width + 5;
 
+                // "in"
                 c.font = `500 ${barH * 0.14}px 'Apple SD Gothic Neo'`;
                 c.fillText("in", cursorX, eqY);
                 cursorX += c.measureText("in").width + 5;
 
+                // "13"
                 c.fillStyle = "white";
                 c.font = `400 ${barH * 0.32}px 'Anton'`;
                 c.fillText(ballsRem, cursorX, eqY);
                 cursorX += c.measureText(ballsRem).width + 5;
 
+                // "BALLS"
                 c.fillStyle = "#9ca3af";
                 c.font = `700 ${barH * 0.16}px 'Apple SD Gothic Neo'`;
                 c.fillText("BALLS", cursorX, eqY);
@@ -498,23 +555,22 @@
             }
         }
         
-        // --- FB LIVE HANDLING ---
-        function showFbHelp() {
-            document.getElementById('fb-help-modal').style.display = 'flex';
-        }
-        function closeFbHelp() {
-            document.getElementById('fb-help-modal').style.display = 'none';
-        }
+        // --- SOCIAL LIVE HANDLING ---
+        function showFbHelp() { document.getElementById('fb-help-modal').style.display = 'flex'; }
+        function showYtHelp() { document.getElementById('yt-help-modal').style.display = 'flex'; }
+        function closeHelp(type) { document.getElementById(`${type}-help-modal`).style.display = 'none'; }
+        
         function proceedToFb() {
-            // FIX: Use standard _blank tab to prevent Safari redirect errors
+            // Standard Tab to fix Safari redirect issues
             const url = "https://www.facebook.com/live/producer";
             const win = window.open(url, "_blank");
-            if (win) {
-                win.focus();
-                closeFbHelp();
-            } else {
-                alert("Please allow popups for this site to open Facebook Live.");
-            }
+            if (win) { win.focus(); closeHelp('fb'); } else { alert("Please allow popups."); }
+        }
+
+        function proceedToStreamYard() {
+            const url = "https://streamyard.com/broadcasts";
+            const win = window.open(url, "_blank");
+            if (win) { win.focus(); closeHelp('yt'); } else { alert("Please allow popups."); }
         }
 
         // --- OPTIMIZED RECORDING ---
