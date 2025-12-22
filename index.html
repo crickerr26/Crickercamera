@@ -3,103 +3,201 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Broadcast Camera</title>
+    <title>Live Broadcast</title>
     
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700;900&display=swap" rel="stylesheet">
+    
+    <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;700&family=Roboto:wght@400;500;700;900&display=swap" rel="stylesheet">
     
     <style>
-        body { font-family: 'Roboto', sans-serif; background-color: #000; color: white; overflow: hidden; margin: 0; }
-        #app-container { position: relative; height: 100vh; width: 100vw; }
-        canvas { width: 100%; height: 100%; object-fit: contain; }
+        /* --- RESET --- */
+        * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; -webkit-user-select: none; }
+        body { background-color: #000; overflow: hidden; font-family: 'Roboto', sans-serif; }
+
+        /* --- LAYOUT CONTAINERS --- */
+        #app-container { position: relative; width: 100vw; height: 100vh; background: #000; }
         
+        /* Video & Canvas stack */
+        #video-source { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; z-index: 1; }
+        #broadcast-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: contain; z-index: 2; }
+
+        /* --- UI ELEMENTS --- */
         #status-pill {
-            position: absolute; top: 20px; left: 20px;
-            background: rgba(0,0,0,0.6); padding: 5px 15px; border-radius: 20px;
-            font-size: 12px; font-weight: bold; color: #4ade80; border: 1px solid #4ade80;
-            z-index: 20; display: none;
+            position: absolute; top: 20px; left: 20px; z-index: 10;
+            background: rgba(0, 0, 0, 0.7); padding: 6px 16px; border-radius: 50px;
+            color: #4ade80; font-size: 12px; font-weight: 900; letter-spacing: 1px;
+            border: 1px solid rgba(74, 222, 128, 0.3); display: flex; align-items: center; gap: 6px;
+            backdrop-filter: blur(4px);
+        }
+        .live-dot { width: 8px; height: 8px; background: #4ade80; border-radius: 50%; animation: blink 1s infinite; }
+
+        #rec-button {
+            position: absolute; top: 20px; right: 20px; z-index: 10;
+            background: rgba(220, 38, 38, 0.2); border: 1px solid rgba(220, 38, 38, 0.5);
+            padding: 6px 16px; border-radius: 50px; color: white;
+            font-size: 12px; font-weight: 900; letter-spacing: 1px;
+            display: flex; align-items: center; gap: 8px; cursor: pointer;
+            backdrop-filter: blur(4px); transition: all 0.2s;
+        }
+        #rec-dot { width: 10px; height: 10px; background: #ef4444; border-radius: 50%; }
+        .recording { background: rgba(220, 38, 38, 0.9) !important; color: white; box-shadow: 0 0 15px rgba(220, 38, 38, 0.5); }
+        .recording #rec-dot { animation: pulse 1s infinite; background: white; }
+
+        /* --- SETUP SCREEN --- */
+        #setup-screen {
+            position: absolute; inset: 0; z-index: 50;
+            background: radial-gradient(circle at center, #1e293b 0%, #0f172a 100%);
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+        }
+        .input-group { margin-bottom: 2rem; text-align: center; }
+        .input-field {
+            background: rgba(255,255,255,0.05); border: 2px solid rgba(255,255,255,0.1);
+            color: white; font-size: 3rem; text-align: center; font-weight: 900; letter-spacing: 0.5rem;
+            width: 280px; padding: 1rem; border-radius: 1rem; outline: none; transition: all 0.3s;
+            font-family: 'Oswald', sans-serif;
+        }
+        .input-field:focus { border-color: #3b82f6; box-shadow: 0 0 30px rgba(59, 130, 246, 0.3); }
+        
+        .start-btn {
+            background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+            color: white; border: none; padding: 1rem 3rem; border-radius: 1rem;
+            font-size: 1.2rem; font-weight: 800; letter-spacing: 1px;
+            cursor: pointer; box-shadow: 0 10px 20px rgba(0,0,0,0.3);
+            transition: transform 0.1s;
+        }
+        .start-btn:active { transform: scale(0.95); }
+
+        /* --- ROTATE WARNING (LANDSCAPE LOCK) --- */
+        #portrait-warning {
+            position: fixed; inset: 0; z-index: 100;
+            background: #0f172a; color: white;
+            display: none; flex-direction: column; align-items: center; justify-content: center;
+            text-align: center; padding: 20px;
+        }
+        .rotate-icon { font-size: 4rem; margin-bottom: 1rem; animation: rotatePhone 2s infinite; }
+
+        @media (orientation: portrait) {
+            #portrait-warning { display: flex !important; }
+            #app-container { display: none; }
         }
 
-        #setup-screen { position: absolute; inset: 0; background: #0f172a; z-index: 50; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-        .input-field { background: #1e293b; border: 1px solid #334155; padding: 15px; color: white; font-size: 2.5rem; text-align: center; border-radius: 10px; width: 200px; margin-bottom: 20px; letter-spacing: 5px; font-weight: 900; }
-        
-        #rec-button {
-            position: absolute; top: 20px; right: 20px;
-            background: rgba(255, 0, 0, 0.2); border: 1px solid rgba(255, 255, 255, 0.5);
-            backdrop-filter: blur(4px); padding: 5px 15px 5px 5px;
-            border-radius: 30px; display: flex; align-items: center; gap: 8px;
-            font-weight: 900; font-size: 12px; letter-spacing: 1px; z-index: 20; cursor: pointer;
-        }
-        #rec-dot { width: 24px; height: 24px; background-color: #ef4444; border-radius: 50%; }
-        .recording #rec-dot { animation: pulse 2s infinite; transform: scale(0.6); border-radius: 4px; }
-        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+        @keyframes blink { 50% { opacity: 0.4; } }
+        @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(0.8); } 100% { transform: scale(1); } }
+        @keyframes rotatePhone { 0%, 10% { transform: rotate(0deg); } 40%, 60% { transform: rotate(-90deg); } 90%, 100% { transform: rotate(0deg); } }
     </style>
 </head>
 <body>
 
-    <video id="video-source" autoplay playsinline muted style="display:none;"></video>
-
-    <div id="setup-screen">
-        <h1 style="color: #60a5fa; margin-bottom: 20px; font-weight: 900; text-transform: uppercase;">Broadcast Unit</h1>
-        <p style="color: #94a3b8; font-size: 12px; margin-bottom: 5px; font-weight: bold;">ENTER MATCH ID</p>
-        <input type="text" id="match-id" class="input-field" placeholder="0000" maxlength="4" inputmode="numeric">
-        <button onclick="connectToMatch()" style="background-color: #2563eb; color: white; padding: 15px 30px; border-radius: 12px; font-weight: bold; font-size: 18px; border: none; box-shadow: 0 4px 6px rgba(0,0,0,0.3);">CONNECT CAMERA</button>
+    <div id="portrait-warning">
+        <div class="rotate-icon">⟳</div>
+        <h2 style="font-weight: 900; font-size: 1.5rem; margin-bottom: 10px;">ROTATE DEVICE</h2>
+        <p style="color: #94a3b8;">This scoreboard requires<br>LANDSCAPE mode.</p>
     </div>
 
-    <div id="app-container" style="display:none;">
-        <div id="status-pill">● SYNCED</div>
-        <div id="rec-button" onclick="toggleRecording()">
-            <div id="rec-dot"></div><span id="rec-text">REC</span>
+    <div id="setup-screen">
+        <div style="margin-bottom: 30px; text-align: center;">
+            <div style="font-size: 4rem; margin-bottom: 10px;">🎥</div>
+            <h1 style="font-family: 'Oswald'; text-transform: uppercase; font-size: 1.5rem; letter-spacing: 2px; color: #60a5fa;">Broadcast Unit</h1>
         </div>
+        
+        <div class="input-group">
+            <p style="color: #94a3b8; font-size: 0.8rem; font-weight: bold; margin-bottom: 10px; text-transform: uppercase;">Enter Match ID</p>
+            <input type="text" id="match-id" class="input-field" placeholder="0000" maxlength="4" inputmode="numeric">
+        </div>
+        
+        <button onclick="connectToMatch()" class="start-btn">CONNECT CAMERA</button>
+    </div>
+
+    <div id="app-container" style="display: none;">
+        <div id="status-pill"><div class="live-dot"></div> LIVE SYNC</div>
+        <div id="rec-button" onclick="toggleRecording()"><div id="rec-dot"></div> REC</div>
+        
+        <video id="video-source" autoplay playsinline muted></video>
         <canvas id="broadcast-canvas"></canvas>
     </div>
 
     <script>
+        // --- FIREBASE CONFIG ---
         const firebaseConfig = { apiKey: "AIzaSyBqcD59IAPpKqk98oDZkgzgkoVZ8b8LGgY", authDomain: "livecricketscoring-92087.firebaseapp.com", databaseURL: "https://livecricketscoring-92087-default-rtdb.firebaseio.com", projectId: "livecricketscoring-92087", storageBucket: "livecricketscoring-92087.firebasestorage.app", messagingSenderId: "522927197627", appId: "1:522927197627:web:f1df5db736cae96893089e" };
-        firebase.initializeApp(firebaseConfig);
+        if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore();
 
-        let match = { t1: "", t2: "", score: 0, wickets: 0, overs: 0, balls: 0, striker: { name: "", runs: 0, balls: 0 }, nonStriker: { name: "", runs: 0, balls: 0 }, bowler: { name: "", wkts: 0, runs: 0, balls: 0 }, currentOver: [] };
-        let lastActionId = null, animationType = null, animationTime = 0;
+        // --- GLOBAL STATE ---
+        let match = { 
+            t1: "HOME", t2: "AWAY", score: 0, wickets: 0, overs: 0, balls: 0, 
+            striker: { name: "", runs: 0, balls: 0 }, 
+            nonStriker: { name: "", runs: 0, balls: 0 }, 
+            bowler: { name: "", wkts: 0, runs: 0, balls: 0 }, 
+            currentOver: [] 
+        };
+        
+        // Asset Cache
+        let team1Logo = null;
+        let team2Logo = null;
+        let lastActionId = null, animType = null, animTime = 0;
+        
+        // Canvas & Video
         const video = document.getElementById('video-source');
         const canvas = document.getElementById('broadcast-canvas');
         const ctx = canvas.getContext('2d');
         let recorder, chunks = [], isRecording = false;
 
-        // CHECK URL FOR ID
+        // --- INIT ---
         window.onload = function() {
+            // Auto-connect if ID is in URL
             const params = new URLSearchParams(window.location.search);
             if(params.has('id')) {
                 document.getElementById('match-id').value = params.get('id');
                 connectToMatch();
             }
+            
+            // Handle Resize
+            window.addEventListener('resize', resizeCanvas);
         };
 
-        function connectToMatch() {
-            const matchId = document.getElementById('match-id').value;
-            if(!matchId) return alert("Enter Match ID");
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
 
-            navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment", width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: true })
-            .then(stream => {
+        function connectToMatch() {
+            const id = document.getElementById('match-id').value;
+            if(!id) return alert("Please enter a Match ID");
+
+            // Request Camera
+            navigator.mediaDevices.getUserMedia({ 
+                video: { facingMode: "environment", width: { ideal: 1920 }, height: { ideal: 1080 } }, 
+                audio: true 
+            }).then(stream => {
                 video.srcObject = stream;
-                video.onloadedmetadata = () => {
-                    canvas.width = video.videoWidth;
-                    canvas.height = video.videoHeight;
-                    requestAnimationFrame(renderLoop);
-                    document.getElementById('setup-screen').style.display = 'none';
-                    document.getElementById('app-container').style.display = 'block';
-                    document.getElementById('status-pill').style.display = 'block';
-                    listenToDatabase(matchId);
-                };
+                document.getElementById('setup-screen').style.display = 'none';
+                document.getElementById('app-container').style.display = 'block';
+                resizeCanvas();
+                
+                // Start Loop
+                requestAnimationFrame(renderLoop);
+                
+                // Start Listeners
+                listenToDB(id);
             }).catch(e => alert("Camera Error: " + e.message));
         }
 
-        function listenToDatabase(id) {
-            db.collection("live_matches").doc(id).onSnapshot((doc) => {
-                if (doc.exists) {
+        function listenToDB(id) {
+            db.collection("live_matches").doc(id).onSnapshot(doc => {
+                if(doc.exists) {
                     const data = doc.data();
-                    match = data; 
+                    match = data;
+                    
+                    // Handle Logos (If data URIs are sent)
+                    if(data.t1Logo && (!team1Logo || team1Logo.src !== data.t1Logo)) {
+                        team1Logo = new Image(); team1Logo.src = data.t1Logo;
+                    }
+                    if(data.t2Logo && (!team2Logo || team2Logo.src !== data.t2Logo)) {
+                        team2Logo = new Image(); team2Logo.src = data.t2Logo;
+                    }
+                    
+                    // Handle Animations
                     if (data.lastAction && data.lastAction.id !== lastActionId) {
                         lastActionId = data.lastAction.id;
                         triggerAnim(data.lastAction.type);
@@ -108,98 +206,262 @@
             });
         }
 
+        // --- RENDER LOOP ---
         function renderLoop() {
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-            drawInternationalOverlay(ctx, canvas.width, canvas.height);
+            // 1. Clear & Draw Video
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            // (Video is behind canvas, so no need to drawImage if using CSS layering, 
+            // BUT for recording we must draw it)
+            if(isRecording) ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            // 2. Draw HUD
+            drawScoreboard(ctx, canvas.width, canvas.height);
             drawPopups(ctx, canvas.width, canvas.height);
+
             requestAnimationFrame(renderLoop);
         }
 
-        function drawInternationalOverlay(c, w, h) {
-            const barH = h * 0.15; const y = h - barH - (h * 0.05); const pad = w * 0.02;
+        // --- ICC SCOREBOARD PAINTER ---
+        function drawScoreboard(c, w, h) {
+            const barH = h * 0.16; // Height of the bar
+            const marginX = w * 0.04;
+            const bottomY = h - barH - (h * 0.05);
 
-            // Batting Pill
-            const wBat = w * 0.38;
-            drawPill(c, pad, y, wBat, barH, "#f8fafc");
-            c.fillStyle = "#047857"; c.fillRect(pad, y, barH, barH); 
+            // --- FONTS ---
+            const fontBig = `900 ${barH * 0.35}px 'Oswald'`;
+            const fontMed = `700 ${barH * 0.22}px 'Roboto'`;
+            const fontSmall = `500 ${barH * 0.18}px 'Roboto'`;
+
+            // --- 1. GLASS BACKGROUND ---
+            // Main container pill
+            const pillW = w - (marginX * 2);
+            const pillX = marginX;
             
-            let fsName = barH * 0.25;
-            c.fillStyle = "#0f172a"; c.textAlign = "left"; c.font = `900 ${fsName}px 'Roboto'`;
-            c.fillText(`► ${match.striker.name}`, pad + barH + 10, y + barH*0.35);
-            c.textAlign = "right"; c.font = `500 ${fsName}px 'Roboto'`;
-            c.fillText(`${match.striker.runs} (${match.striker.balls})`, pad + wBat - 20, y + barH*0.35);
-
-            c.fillStyle = "#64748b"; c.textAlign = "left"; c.font = `700 ${fsName}px 'Roboto'`;
-            c.fillText(`${match.nonStriker.name}`, pad + barH + 10, y + barH*0.75);
-            c.textAlign = "right";
-            c.fillText(`${match.nonStriker.runs} (${match.nonStriker.balls})`, pad + wBat - 20, y + barH*0.75);
-
-            // Score Pill
-            const wScore = w * 0.24; const xScore = pad + wBat - 20;
-            const grad = c.createLinearGradient(xScore, y, xScore + wScore, y);
-            grad.addColorStop(0, "#1e1b4b"); grad.addColorStop(1, "#312e81");
-            drawPill(c, xScore, y - 5, wScore + 40, barH + 10, grad);
-
-            c.fillStyle = "white"; c.textAlign = "center"; c.font = `900 ${barH * 0.5}px 'Roboto'`;
-            c.fillText(`${match.score}-${match.wickets}`, xScore + (wScore/2) + 10, y + barH * 0.55);
-            c.font = `700 ${barH * 0.18}px 'Roboto'`; c.fillStyle = "#fbbf24";
-            c.fillText(`${match.t1} v ${match.t2}`, xScore + (wScore/2) + 10, y + barH * 0.2);
-            c.fillStyle = "#94a3b8";
-            c.fillText(`OVERS: ${match.overs}.${match.balls}`, xScore + (wScore/2) + 10, y + barH * 0.85);
-
-            // Bowling Pill
-            const wBowl = w * 0.38; const xBowl = xScore + wScore;
-            drawPill(c, xBowl, y, wBowl, barH, "#f8fafc");
-
-            c.fillStyle = "#0f172a"; c.textAlign = "left"; c.font = `900 ${fsName}px 'Roboto'`;
-            c.fillText(match.bowler.name, xBowl + 40, y + barH*0.35);
-            c.textAlign = "right";
-            c.fillText(`${match.bowler.wkts}-${match.bowler.runs}`, xBowl + wBowl - barH - 10, y + barH*0.35);
-            c.fillStyle = "#7f1d1d"; c.fillRect(xBowl + wBowl - barH, y, barH, barH);
-
-            const bubbleR = barH * 0.12; const bubbleY = y + barH * 0.75; let bx = xBowl + 40 + bubbleR;
-            c.font = `bold ${barH * 0.15}px 'Roboto'`; c.textAlign = "center"; c.textBaseline = "middle";
+            c.save();
+            // Gradient Dark Glass
+            const grad = c.createLinearGradient(pillX, bottomY, pillX + pillW, bottomY);
+            grad.addColorStop(0, "rgba(15, 23, 42, 0.95)"); // Dark Slate
+            grad.addColorStop(0.5, "rgba(30, 41, 59, 0.9)");
+            grad.addColorStop(1, "rgba(15, 23, 42, 0.95)");
             
-            if(match.currentOver) {
-                match.currentOver.forEach(ball => {
-                    c.beginPath(); c.arc(bx, bubbleY, bubbleR, 0, Math.PI*2);
-                    if(ball === 'W') c.fillStyle = "#ef4444";
-                    else if(ball === '4') c.fillStyle = "#3b82f6";
-                    else if(ball === '6') c.fillStyle = "#22c55e";
-                    else c.fillStyle = "white";
-                    c.fill(); c.fillStyle = (ball === 'W'||ball==='4'||ball==='6') ? "white" : "black";
-                    c.fillText(ball, bx, bubbleY); bx += (bubbleR * 2.5);
+            c.shadowColor = "rgba(0,0,0,0.5)"; c.shadowBlur = 20;
+            drawRoundRect(c, pillX, bottomY, pillW, barH, 16);
+            c.fillStyle = grad;
+            c.fill();
+            
+            // Border stroke
+            c.strokeStyle = "rgba(255,255,255,0.1)"; c.lineWidth = 1;
+            c.stroke();
+            c.restore();
+
+            // --- 2. TEAM LOGOS & NAMES ---
+            const logoSize = barH * 0.7;
+            const logoY = bottomY + (barH - logoSize) / 2;
+            
+            // Left Team (Batting)
+            drawTeamSection(c, match.t1, team1Logo, pillX + 20, logoY, logoSize, true);
+            
+            // Right Team (Bowling)
+            drawTeamSection(c, match.t2, team2Logo, pillX + pillW - 20 - logoSize, logoY, logoSize, false);
+
+            // --- 3. CENTER SCORE BOARD (The Highlight) ---
+            const centerW = pillW * 0.25;
+            const centerX = pillX + (pillW - centerW) / 2;
+            
+            // Highlight Box
+            c.save();
+            const scoreGrad = c.createLinearGradient(centerX, bottomY, centerX, bottomY + barH);
+            scoreGrad.addColorStop(0, "#2563eb"); scoreGrad.addColorStop(1, "#1e40af");
+            
+            // Draw Center Shape (Trapezoid or Rect)
+            drawRoundRect(c, centerX, bottomY - 5, centerW, barH + 10, 8); // Pop out slightly
+            c.fillStyle = scoreGrad; c.fill();
+            // Top Shine
+            c.fillStyle = "rgba(255,255,255,0.1)"; c.fill();
+            c.restore();
+
+            // Score Text
+            c.textAlign = "center"; c.fillStyle = "#fff";
+            c.font = `900 ${barH * 0.55}px 'Oswald'`;
+            c.fillText(`${match.score}/${match.wickets}`, centerX + centerW/2, bottomY + barH * 0.6);
+            
+            // Overs Text
+            c.fillStyle = "#93c5fd"; // Light Blue
+            c.font = fontSmall;
+            c.fillText(`OVERS ${match.overs}.${match.balls}`, centerX + centerW/2, bottomY + barH * 0.85);
+            
+            // "LIVE" Badge
+            c.fillStyle = "#fbbf24"; c.font = `900 ${barH * 0.15}px 'Roboto'`;
+            c.fillText("● LIVE", centerX + centerW/2, bottomY + barH * 0.2);
+
+            // --- 4. BATTING STATS (Left of Center) ---
+            const batAreaX = pillX + logoSize + 40;
+            const batAreaW = (centerX - batAreaX) - 20;
+            
+            c.textAlign = "left"; 
+            
+            // Striker
+            c.fillStyle = "#fff"; c.font = fontMed;
+            c.fillText(`► ${match.striker.name}`, batAreaX, bottomY + barH * 0.35);
+            c.textAlign = "right"; c.fillStyle = "#fbbf24";
+            c.fillText(`${match.striker.runs} (${match.striker.balls})`, batAreaX + batAreaW, bottomY + barH * 0.35);
+
+            // Non-Striker
+            c.textAlign = "left"; c.fillStyle = "#94a3b8"; c.font = fontSmall;
+            c.fillText(match.nonStriker.name, batAreaX, bottomY + barH * 0.7);
+            c.textAlign = "right";
+            c.fillText(`${match.nonStriker.runs} (${match.nonStriker.balls})`, batAreaX + batAreaW, bottomY + barH * 0.7);
+
+            // --- 5. BOWLING STATS (Right of Center) ---
+            const bowlAreaX = centerX + centerW + 20;
+            const bowlAreaW = (pillX + pillW - logoSize - 40) - bowlAreaX;
+
+            c.textAlign = "left"; c.fillStyle = "#fff"; c.font = fontMed;
+            c.fillText(match.bowler.name, bowlAreaX, bottomY + barH * 0.35);
+            
+            c.textAlign = "right"; c.fillStyle = "#fbbf24";
+            c.fillText(`${match.bowler.wkts}-${match.bowler.runs}`, bowlAreaX + bowlAreaW, bottomY + barH * 0.35);
+            
+            // --- 6. CURRENT OVER BUBBLES ---
+            // Draw these under the bowler name
+            const bubbleR = barH * 0.12;
+            const bubbleY = bottomY + barH * 0.7;
+            let bubbleX = bowlAreaX + bubbleR;
+
+            if (match.currentOver && Array.isArray(match.currentOver)) {
+                c.textAlign = "center"; c.textBaseline = "middle"; c.font = `bold ${bubbleR}px 'Roboto'`;
+                
+                // Show last 6 balls only
+                const recentBalls = match.currentOver.slice(-6);
+                
+                recentBalls.forEach(b => {
+                    c.beginPath();
+                    c.arc(bubbleX, bubbleY, bubbleR, 0, Math.PI * 2);
+                    
+                    // Bubble Colors
+                    if (b === '4') c.fillStyle = "#3b82f6"; // Blue
+                    else if (b === '6') c.fillStyle = "#22c55e"; // Green
+                    else if (b === 'W') c.fillStyle = "#ef4444"; // Red
+                    else c.fillStyle = "#f1f5f9"; // White/Grey
+
+                    c.fill();
+                    
+                    // Text Color
+                    c.fillStyle = (b === '4' || b === '6' || b === 'W') ? "#fff" : "#0f172a";
+                    c.fillText(b, bubbleX, bubbleY);
+                    
+                    bubbleX += (bubbleR * 2.4);
                 });
+                c.textBaseline = "alphabetic"; // Reset
             }
-            c.textBaseline = "alphabetic";
         }
 
-        function drawPill(c, x, y, w, h, fill) { c.beginPath(); c.roundRect(x, y, w, h, 10); c.fillStyle = fill; c.fill(); }
-        function triggerAnim(type) { animationType = type; animationTime = Date.now(); }
+        function drawTeamSection(c, name, logoImg, x, y, size, isLeft) {
+            c.save();
+            // Draw Circle Background
+            c.beginPath();
+            c.arc(x + size/2, y + size/2, size/2, 0, Math.PI*2);
+            c.fillStyle = "#fff";
+            c.fill();
+            c.clip(); // Clip image to circle
 
-        function drawPopups(c, w, h) {
-            if (!animationType) return;
-            const now = Date.now();
-            if (now - animationTime > 2500) { animationType = null; return; }
-            c.save(); c.translate(w/2, h/2);
-            const progress = (now - animationTime) / 200; const scale = progress < 1 ? progress : 1;
-            c.scale(scale, scale); c.shadowColor = "black"; c.shadowBlur = 20; c.textAlign = "center"; c.textBaseline = "middle"; c.font = `900 ${h*0.3}px 'Roboto'`;
-            if (animationType === '4') { c.fillStyle = "#3b82f6"; c.fillText("FOUR", 0, 0); }
-            else if (animationType === '6') { c.fillStyle = "#22c55e"; c.fillText("SIX", 0, 0); }
-            else if (animationType === 'W') { c.fillStyle = "#ef4444"; c.fillText("WICKET", 0, 0); }
+            if(logoImg) {
+                c.drawImage(logoImg, x, y, size, size);
+            } else {
+                // Fallback: Initials
+                c.fillStyle = isLeft ? "#047857" : "#b91c1c"; // Green vs Red fallback
+                c.fillRect(x, y, size, size);
+                c.fillStyle = "#fff"; c.textAlign = "center"; c.textBaseline = "middle";
+                c.font = `bold ${size*0.4}px 'Roboto'`;
+                c.fillText(name.substring(0,2).toUpperCase(), x + size/2, y + size/2);
+            }
             c.restore();
         }
+
+        function drawRoundRect(c, x, y, w, h, r) {
+            if (w < 2 * r) r = w / 2;
+            if (h < 2 * r) r = h / 2;
+            c.beginPath();
+            c.moveTo(x + r, y);
+            c.arcTo(x + w, y, x + w, y + h, r);
+            c.arcTo(x + w, y + h, x, y + h, r);
+            c.arcTo(x, y + h, x, y, r);
+            c.arcTo(x, y, x + w, y, r);
+            c.closePath();
+        }
+
+        // --- ANIMATIONS ---
+        function triggerAnim(type) { animType = type; animTime = Date.now(); }
         
-        function toggleRecording() {
-            if(isRecording) { recorder.stop(); isRecording = false; document.getElementById('rec-button').classList.remove('recording'); }
-            else {
-                const stream = canvas.captureStream(30);
-                if(video.srcObject) { const audio = video.srcObject.getAudioTracks(); if(audio.length) stream.addTrack(audio[0]); }
-                recorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
-                chunks = []; recorder.ondataavailable = e => { if(e.data.size) chunks.push(e.data); };
-                recorder.onstop = () => { const b = new Blob(chunks, {type:'video/webm'}); const u = URL.createObjectURL(b); const a = document.createElement('a'); a.href=u; a.download=`match_${Date.now()}.webm`; a.click(); };
-                recorder.start(); isRecording = true; document.getElementById('rec-button').classList.add('recording');
+        function drawPopups(c, w, h) {
+            if (!animType) return;
+            const now = Date.now();
+            const duration = 2500;
+            if (now - animTime > duration) { animType = null; return; }
+
+            c.save();
+            c.translate(w/2, h/2);
+            
+            // Pop in effect
+            const progress = (now - animTime) / 300; 
+            const scale = progress < 1 ? (Math.sin(progress * Math.PI/2) * 1.2) : 1;
+            
+            c.scale(scale, scale);
+            c.shadowColor = "rgba(0,0,0,0.8)"; c.shadowBlur = 30;
+            c.textAlign = "center"; c.textBaseline = "middle";
+            c.font = `900 ${h * 0.35}px 'Oswald'`;
+
+            if (animType === '4') { 
+                c.fillStyle = "#3b82f6"; c.fillText("FOUR", 0, 0); 
+                c.strokeStyle = "white"; c.lineWidth = 4; c.strokeText("FOUR", 0, 0);
             }
+            else if (animType === '6') { 
+                c.fillStyle = "#22c55e"; c.fillText("SIX", 0, 0);
+                c.strokeStyle = "white"; c.lineWidth = 4; c.strokeText("SIX", 0, 0);
+            }
+            else if (animType === 'W') { 
+                c.fillStyle = "#ef4444"; c.fillText("OUT", 0, 0);
+                c.strokeStyle = "white"; c.lineWidth = 4; c.strokeText("OUT", 0, 0);
+            }
+            
+            c.restore();
+        }
+
+        // --- RECORDING ---
+        function toggleRecording() {
+            if(isRecording) {
+                recorder.stop();
+                isRecording = false;
+                document.getElementById('rec-button').classList.remove('recording');
+            } else {
+                // Combine Canvas + Audio
+                const stream = canvas.captureStream(30);
+                if(video.srcObject) {
+                    const audioTracks = video.srcObject.getAudioTracks();
+                    if(audioTracks.length > 0) stream.addTrack(audioTracks[0]);
+                }
+                
+                recorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+                chunks = [];
+                recorder.ondataavailable = e => { if(e.data.size) chunks.push(e.data); };
+                recorder.onstop = saveVideo;
+                recorder.start();
+                
+                isRecording = true;
+                document.getElementById('rec-button').classList.add('recording');
+            }
+        }
+
+        function saveVideo() {
+            const blob = new Blob(chunks, { type: 'video/webm' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.style.display = 'none';
+            a.href = url;
+            a.download = `match_${Date.now()}.webm`;
+            document.body.appendChild(a);
+            a.click();
+            setTimeout(() => { document.body.removeChild(a); window.URL.revokeObjectURL(url); }, 100);
         }
     </script>
 </body>
