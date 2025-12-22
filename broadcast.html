@@ -1,0 +1,206 @@
+\<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Broadcast Camera</title>
+    
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700;900&display=swap" rel="stylesheet">
+    
+    <style>
+        body { font-family: 'Roboto', sans-serif; background-color: #000; color: white; overflow: hidden; margin: 0; }
+        #app-container { position: relative; height: 100vh; width: 100vw; }
+        canvas { width: 100%; height: 100%; object-fit: contain; }
+        
+        #status-pill {
+            position: absolute; top: 20px; left: 20px;
+            background: rgba(0,0,0,0.6); padding: 5px 15px; border-radius: 20px;
+            font-size: 12px; font-weight: bold; color: #4ade80; border: 1px solid #4ade80;
+            z-index: 20; display: none;
+        }
+
+        #setup-screen { position: absolute; inset: 0; background: #0f172a; z-index: 50; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        .input-field { background: #1e293b; border: 1px solid #334155; padding: 15px; color: white; font-size: 2.5rem; text-align: center; border-radius: 10px; width: 200px; margin-bottom: 20px; letter-spacing: 5px; font-weight: 900; }
+        
+        #rec-button {
+            position: absolute; top: 20px; right: 20px;
+            background: rgba(255, 0, 0, 0.2); border: 1px solid rgba(255, 255, 255, 0.5);
+            backdrop-filter: blur(4px); padding: 5px 15px 5px 5px;
+            border-radius: 30px; display: flex; align-items: center; gap: 8px;
+            font-weight: 900; font-size: 12px; letter-spacing: 1px; z-index: 20; cursor: pointer;
+        }
+        #rec-dot { width: 24px; height: 24px; background-color: #ef4444; border-radius: 50%; }
+        .recording #rec-dot { animation: pulse 2s infinite; transform: scale(0.6); border-radius: 4px; }
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+    </style>
+</head>
+<body>
+
+    <video id="video-source" autoplay playsinline muted style="display:none;"></video>
+
+    <div id="setup-screen">
+        <h1 style="color: #60a5fa; margin-bottom: 20px; font-weight: 900; text-transform: uppercase;">Broadcast Unit</h1>
+        <p style="color: #94a3b8; font-size: 12px; margin-bottom: 5px; font-weight: bold;">ENTER MATCH ID</p>
+        <input type="text" id="match-id" class="input-field" placeholder="0000" maxlength="4" inputmode="numeric">
+        <button onclick="connectToMatch()" style="background-color: #2563eb; color: white; padding: 15px 30px; border-radius: 12px; font-weight: bold; font-size: 18px; border: none; box-shadow: 0 4px 6px rgba(0,0,0,0.3);">CONNECT CAMERA</button>
+    </div>
+
+    <div id="app-container" style="display:none;">
+        <div id="status-pill">● SYNCED</div>
+        <div id="rec-button" onclick="toggleRecording()">
+            <div id="rec-dot"></div><span id="rec-text">REC</span>
+        </div>
+        <canvas id="broadcast-canvas"></canvas>
+    </div>
+
+    <script>
+        const firebaseConfig = { apiKey: "AIzaSyBqcD59IAPpKqk98oDZkgzgkoVZ8b8LGgY", authDomain: "livecricketscoring-92087.firebaseapp.com", databaseURL: "https://livecricketscoring-92087-default-rtdb.firebaseio.com", projectId: "livecricketscoring-92087", storageBucket: "livecricketscoring-92087.firebasestorage.app", messagingSenderId: "522927197627", appId: "1:522927197627:web:f1df5db736cae96893089e" };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+
+        let match = { t1: "", t2: "", score: 0, wickets: 0, overs: 0, balls: 0, striker: { name: "", runs: 0, balls: 0 }, nonStriker: { name: "", runs: 0, balls: 0 }, bowler: { name: "", wkts: 0, runs: 0, balls: 0 }, currentOver: [] };
+        let lastActionId = null, animationType = null, animationTime = 0;
+        const video = document.getElementById('video-source');
+        const canvas = document.getElementById('broadcast-canvas');
+        const ctx = canvas.getContext('2d');
+        let recorder, chunks = [], isRecording = false;
+
+        // CHECK URL FOR ID
+        window.onload = function() {
+            const params = new URLSearchParams(window.location.search);
+            if(params.has('id')) {
+                document.getElementById('match-id').value = params.get('id');
+                connectToMatch();
+            }
+        };
+
+        function connectToMatch() {
+            const matchId = document.getElementById('match-id').value;
+            if(!matchId) return alert("Enter Match ID");
+
+            navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment", width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: true })
+            .then(stream => {
+                video.srcObject = stream;
+                video.onloadedmetadata = () => {
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                    requestAnimationFrame(renderLoop);
+                    document.getElementById('setup-screen').style.display = 'none';
+                    document.getElementById('app-container').style.display = 'block';
+                    document.getElementById('status-pill').style.display = 'block';
+                    listenToDatabase(matchId);
+                };
+            }).catch(e => alert("Camera Error: " + e.message));
+        }
+
+        function listenToDatabase(id) {
+            db.collection("live_matches").doc(id).onSnapshot((doc) => {
+                if (doc.exists) {
+                    const data = doc.data();
+                    match = data; 
+                    if (data.lastAction && data.lastAction.id !== lastActionId) {
+                        lastActionId = data.lastAction.id;
+                        triggerAnim(data.lastAction.type);
+                    }
+                }
+            });
+        }
+
+        function renderLoop() {
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            drawInternationalOverlay(ctx, canvas.width, canvas.height);
+            drawPopups(ctx, canvas.width, canvas.height);
+            requestAnimationFrame(renderLoop);
+        }
+
+        function drawInternationalOverlay(c, w, h) {
+            const barH = h * 0.15; const y = h - barH - (h * 0.05); const pad = w * 0.02;
+
+            // Batting Pill
+            const wBat = w * 0.38;
+            drawPill(c, pad, y, wBat, barH, "#f8fafc");
+            c.fillStyle = "#047857"; c.fillRect(pad, y, barH, barH); 
+            
+            let fsName = barH * 0.25;
+            c.fillStyle = "#0f172a"; c.textAlign = "left"; c.font = `900 ${fsName}px 'Roboto'`;
+            c.fillText(`► ${match.striker.name}`, pad + barH + 10, y + barH*0.35);
+            c.textAlign = "right"; c.font = `500 ${fsName}px 'Roboto'`;
+            c.fillText(`${match.striker.runs} (${match.striker.balls})`, pad + wBat - 20, y + barH*0.35);
+
+            c.fillStyle = "#64748b"; c.textAlign = "left"; c.font = `700 ${fsName}px 'Roboto'`;
+            c.fillText(`${match.nonStriker.name}`, pad + barH + 10, y + barH*0.75);
+            c.textAlign = "right";
+            c.fillText(`${match.nonStriker.runs} (${match.nonStriker.balls})`, pad + wBat - 20, y + barH*0.75);
+
+            // Score Pill
+            const wScore = w * 0.24; const xScore = pad + wBat - 20;
+            const grad = c.createLinearGradient(xScore, y, xScore + wScore, y);
+            grad.addColorStop(0, "#1e1b4b"); grad.addColorStop(1, "#312e81");
+            drawPill(c, xScore, y - 5, wScore + 40, barH + 10, grad);
+
+            c.fillStyle = "white"; c.textAlign = "center"; c.font = `900 ${barH * 0.5}px 'Roboto'`;
+            c.fillText(`${match.score}-${match.wickets}`, xScore + (wScore/2) + 10, y + barH * 0.55);
+            c.font = `700 ${barH * 0.18}px 'Roboto'`; c.fillStyle = "#fbbf24";
+            c.fillText(`${match.t1} v ${match.t2}`, xScore + (wScore/2) + 10, y + barH * 0.2);
+            c.fillStyle = "#94a3b8";
+            c.fillText(`OVERS: ${match.overs}.${match.balls}`, xScore + (wScore/2) + 10, y + barH * 0.85);
+
+            // Bowling Pill
+            const wBowl = w * 0.38; const xBowl = xScore + wScore;
+            drawPill(c, xBowl, y, wBowl, barH, "#f8fafc");
+
+            c.fillStyle = "#0f172a"; c.textAlign = "left"; c.font = `900 ${fsName}px 'Roboto'`;
+            c.fillText(match.bowler.name, xBowl + 40, y + barH*0.35);
+            c.textAlign = "right";
+            c.fillText(`${match.bowler.wkts}-${match.bowler.runs}`, xBowl + wBowl - barH - 10, y + barH*0.35);
+            c.fillStyle = "#7f1d1d"; c.fillRect(xBowl + wBowl - barH, y, barH, barH);
+
+            const bubbleR = barH * 0.12; const bubbleY = y + barH * 0.75; let bx = xBowl + 40 + bubbleR;
+            c.font = `bold ${barH * 0.15}px 'Roboto'`; c.textAlign = "center"; c.textBaseline = "middle";
+            
+            if(match.currentOver) {
+                match.currentOver.forEach(ball => {
+                    c.beginPath(); c.arc(bx, bubbleY, bubbleR, 0, Math.PI*2);
+                    if(ball === 'W') c.fillStyle = "#ef4444";
+                    else if(ball === '4') c.fillStyle = "#3b82f6";
+                    else if(ball === '6') c.fillStyle = "#22c55e";
+                    else c.fillStyle = "white";
+                    c.fill(); c.fillStyle = (ball === 'W'||ball==='4'||ball==='6') ? "white" : "black";
+                    c.fillText(ball, bx, bubbleY); bx += (bubbleR * 2.5);
+                });
+            }
+            c.textBaseline = "alphabetic";
+        }
+
+        function drawPill(c, x, y, w, h, fill) { c.beginPath(); c.roundRect(x, y, w, h, 10); c.fillStyle = fill; c.fill(); }
+        function triggerAnim(type) { animationType = type; animationTime = Date.now(); }
+
+        function drawPopups(c, w, h) {
+            if (!animationType) return;
+            const now = Date.now();
+            if (now - animationTime > 2500) { animationType = null; return; }
+            c.save(); c.translate(w/2, h/2);
+            const progress = (now - animationTime) / 200; const scale = progress < 1 ? progress : 1;
+            c.scale(scale, scale); c.shadowColor = "black"; c.shadowBlur = 20; c.textAlign = "center"; c.textBaseline = "middle"; c.font = `900 ${h*0.3}px 'Roboto'`;
+            if (animationType === '4') { c.fillStyle = "#3b82f6"; c.fillText("FOUR", 0, 0); }
+            else if (animationType === '6') { c.fillStyle = "#22c55e"; c.fillText("SIX", 0, 0); }
+            else if (animationType === 'W') { c.fillStyle = "#ef4444"; c.fillText("WICKET", 0, 0); }
+            c.restore();
+        }
+        
+        function toggleRecording() {
+            if(isRecording) { recorder.stop(); isRecording = false; document.getElementById('rec-button').classList.remove('recording'); }
+            else {
+                const stream = canvas.captureStream(30);
+                if(video.srcObject) { const audio = video.srcObject.getAudioTracks(); if(audio.length) stream.addTrack(audio[0]); }
+                recorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+                chunks = []; recorder.ondataavailable = e => { if(e.data.size) chunks.push(e.data); };
+                recorder.onstop = () => { const b = new Blob(chunks, {type:'video/webm'}); const u = URL.createObjectURL(b); const a = document.createElement('a'); a.href=u; a.download=`match_${Date.now()}.webm`; a.click(); };
+                recorder.start(); isRecording = true; document.getElementById('rec-button').classList.add('recording');
+            }
+        }
+    </script>
+</body>
+</html>
