@@ -31,7 +31,7 @@
             z-index: 2; 
         }
 
-        /* HUD */
+        /* HUD ELEMENTS */
         #status-pill {
             position: absolute; top: 25px; left: 25px; z-index: 10;
             background: linear-gradient(90deg, #dc2626 0%, #991b1b 100%);
@@ -43,6 +43,7 @@
         }
         .live-dot { width: 8px; height: 8px; background: white; border-radius: 50%; animation: blink 1.5s infinite; }
 
+        /* RECORD BUTTON */
         #rec-button {
             position: absolute; top: 25px; right: 25px; z-index: 10;
             background: rgba(0, 0, 0, 0.4); border: 1px solid rgba(255, 255, 255, 0.3);
@@ -54,6 +55,19 @@
         #rec-dot { width: 10px; height: 10px; background: #ef4444; border-radius: 50%; }
         .recording { background: rgba(220, 38, 38, 0.9) !important; border-color: #ef4444 !important; }
         .recording #rec-dot { animation: pulse 1s infinite; background: white; }
+
+        /* FACEBOOK LIVE BUTTON */
+        #fb-button {
+            position: absolute; top: 25px; right: 130px; z-index: 10;
+            background: #1877f2; border: 1px solid rgba(255, 255, 255, 0.2);
+            padding: 6px 16px; border-radius: 50px; color: white;
+            font-size: 12px; font-weight: 700; letter-spacing: 1px;
+            display: flex; align-items: center; gap: 8px; cursor: pointer;
+            box-shadow: 0 4px 15px rgba(24, 119, 242, 0.4);
+            backdrop-filter: blur(8px); transition: all 0.2s;
+        }
+        #fb-button:hover { background: #166fe5; transform: scale(1.05); }
+        #fb-icon { width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; font-family: 'Anton', sans-serif; font-size: 14px; }
 
         #setup-screen { position: absolute; inset: 0; z-index: 50; background: radial-gradient(circle at center, #0f172a 0%, #000000 100%); display: flex; flex-direction: column; align-items: center; justify-content: center; }
         .input-field { background: rgba(255,255,255,0.05); border: 2px solid rgba(255,255,255,0.1); color: #60a5fa; font-size: 4rem; text-align: center; font-weight: 700; letter-spacing: 0.5rem; width: 320px; padding: 1rem; border-radius: 1rem; outline: none; transition: all 0.3s; font-family: 'Anton', sans-serif; margin-bottom: 2rem; }
@@ -74,6 +88,11 @@
 
     <div id="app-container" style="display: none;">
         <div id="status-pill"><div class="live-dot"></div> LIVE</div>
+        
+        <div id="fb-button" onclick="goLive()">
+            <div id="fb-icon">f</div> FB LIVE
+        </div>
+
         <div id="rec-button" onclick="toggleRecording()"><div id="rec-dot"></div> REC</div>
         <video id="video-source" autoplay playsinline muted></video>
         <canvas id="broadcast-canvas"></canvas>
@@ -275,7 +294,7 @@
             c.fillStyle = "#9ca3af"; c.font = `500 ${barH*0.14}px 'Apple SD Gothic Neo'`;
             c.fillText(`${bWkts}-${bRuns} (${bBallsCount})`, bowlX, bottomY + barH * 0.52);
 
-            // Bubbles (Smart Resizing)
+            // Bubbles
             if (match.currentOver && Array.isArray(match.currentOver)) {
                 const balls = match.currentOver;
                 let bubbleR = barH * 0.12; 
@@ -306,14 +325,14 @@
 
                 drawVerticalLine(centerX - 10); 
 
-                // --- TARGET BLOCK (ADJUSTED Y) ---
+                // --- TARGET BLOCK ---
                 c.textAlign = "left";
                 const startX = centerX + 15; 
 
                 // 1. "TO WIN" (Moved UP)
                 c.fillStyle = "#ffcc00"; 
                 c.font = `700 ${barH * 0.20}px 'Apple SD Gothic Neo'`;
-                c.fillText("TO WIN", startX, bottomY + barH * 0.28); // Was 0.35
+                c.fillText("TO WIN", startX, bottomY + barH * 0.28); 
 
                 // 2. EQUATION (Moved DOWN)
                 let cursorX = startX;
@@ -321,45 +340,43 @@
                 const ballsBowled = (match.overs * 6) + match.balls;
                 const ballsRem = (match.totalOvers * 6) - ballsBowled;
                 
-                // Adjusted Y position to 0.62 to clear "TO WIN"
                 const eqY = bottomY + barH * 0.62; 
 
-                // "22" (White Big Bold)
+                // "22"
                 c.fillStyle = "white";
                 c.font = `400 ${barH * 0.32}px 'Anton'`; 
                 c.fillText(runsNeeded, cursorX, eqY);
                 cursorX += c.measureText(runsNeeded).width + 5;
 
-                // "RUNS" (Grey Small Bold)
+                // "RUNS"
                 c.fillStyle = "#9ca3af"; 
                 c.font = `700 ${barH * 0.16}px 'Apple SD Gothic Neo'`;
                 c.fillText("RUNS", cursorX, eqY);
                 cursorX += c.measureText("RUNS").width + 5;
 
-                // "in" (Grey Small)
+                // "in"
                 c.font = `500 ${barH * 0.14}px 'Apple SD Gothic Neo'`;
                 c.fillText("in", cursorX, eqY);
                 cursorX += c.measureText("in").width + 5;
 
-                // "13" (White Big Bold)
+                // "13"
                 c.fillStyle = "white";
                 c.font = `400 ${barH * 0.32}px 'Anton'`;
                 c.fillText(ballsRem, cursorX, eqY);
                 cursorX += c.measureText(ballsRem).width + 5;
 
-                // "BALLS" (Grey Small)
+                // "BALLS"
                 c.fillStyle = "#9ca3af";
                 c.font = `700 ${barH * 0.16}px 'Apple SD Gothic Neo'`;
                 c.fillText("BALLS", cursorX, eqY);
 
-                // 3. TARGET & RATES (Moved Down)
+                // 3. TARGET & RATES
                 const crr = ballsBowled > 0 ? (match.score / (ballsBowled/6)).toFixed(1) : "0.0";
                 const rrr = ballsRem > 0 ? (runsNeeded / (ballsRem/6)).toFixed(1) : runsNeeded;
                 
                 c.fillStyle = "#9ca3af"; 
                 c.font = `500 ${barH * 0.13}px 'Apple SD Gothic Neo'`;
-                // Moved to 0.85 to clear the equation
-                c.fillText(`TARGET ${match.target} - CRR ${crr} - RRR ${rrr}`, startX, bottomY + barH * 0.85);
+                c.fillText(`TARGET ${match.target} • CRR ${crr} • RRR ${rrr}`, startX, bottomY + barH * 0.85);
 
             } else {
                 // *** FIRST INNINGS ***
@@ -433,6 +450,20 @@
                 c.fillStyle = "#cbd5e1"; c.font = `500 ${cardH * 0.08}px 'Apple SD Gothic Neo'`; c.fillText(match.pom.stats, w/2, cardY + cardH * 0.92);
             }
         }
+        
+        // --- FACEBOOK LIVE ---
+        function goLive() {
+            const url = "https://www.facebook.com/live/producer/";
+            const win = window.open(url, '_blank');
+            if (win) {
+                win.focus();
+                alert("🔴 GOING LIVE:\n\n1. Facebook Live Producer opened in new tab.\n2. Select 'Select a video source' -> 'Streaming Software'.\n3. OR use 'Webcam' -> 'Share Screen' to select this window.");
+            } else {
+                alert("Please allow popups to open Facebook Live.");
+            }
+        }
+
+        // --- OPTIMIZED RECORDING ---
         function toggleRecording() {
             if(isRecording) { recorder.stop(); isRecording = false; document.getElementById('rec-button').classList.remove('recording'); }
             else {
