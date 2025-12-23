@@ -2,522 +2,600 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ICC Elite Pro OBS Overlay</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Pro Broadcast Unit</title>
     
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
     
-    <link href="https://fonts.googleapis.com/css2?family=Anton&family=Roboto:wght@400;500;700;900&family=Roboto+Condensed:wght@700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Anton&family=Teko:wght@300;400;500;600;700&family=Roboto:wght@400;500;700;900&display=swap" rel="stylesheet">
     
     <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
-        body, html { width: 100%; height: 100%; overflow: hidden; background: transparent; font-family: 'Roboto', sans-serif; }
-        #app-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
-        #broadcast-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: block; }
+        * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; -webkit-user-select: none; }
+        body, html { width: 100%; height: 100%; overflow: hidden; background: #000; font-family: 'Apple SD Gothic Neo', 'Roboto', sans-serif; }
         
-        #setup-screen { position: absolute; inset: 0; z-index: 50; background: rgba(5, 8, 28, 0.98); display: flex; flex-direction: column; align-items: center; justify-content: center; }
-        .input-field { background: rgba(255,255,255,0.05); border: 2px solid rgba(255,255,255,0.1); color: #fbbf24; font-size: 4rem; text-align: center; font-weight: 700; letter-spacing: 0.5rem; width: 320px; padding: 1rem; border-radius: 1rem; outline: none; transition: all 0.3s; font-family: 'Anton', sans-serif; margin-bottom: 2rem; }
-        .start-btn { background: linear-gradient(135deg, #fbbf24 0%, #d97706 100%); color: #000; border: none; padding: 1rem 4rem; border-radius: 50px; font-size: 1.1rem; font-weight: 800; letter-spacing: 2px; cursor: pointer; box-shadow: 0 10px 30px rgba(251, 191, 36, 0.3); text-transform: uppercase; }
+        #app-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+        
+        /* VIDEO IS HIDDEN BUT ACTIVE (Captured via Canvas) */
+        #video-source { 
+            position: absolute; top: 0; left: 0; 
+            width: 100%; height: 100%; 
+            object-fit: cover; 
+            z-index: 0; 
+            opacity: 0; 
+        }
+        
+        #broadcast-canvas { 
+            position: absolute; top: 0; left: 0; 
+            width: 100%; height: 100%; 
+            object-fit: cover; 
+            z-index: 2; 
+        }
+
+        /* --- CONTROL LAYER --- */
+        #controls-layer {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            z-index: 50; transition: opacity 0.3s ease; pointer-events: none;
+        }
+        .clean-feed #controls-layer { opacity: 0; }
+        .hud-item { pointer-events: auto; }
+
+        /* HUD ELEMENTS */
+        #status-pill {
+            position: absolute; top: 25px; left: 25px;
+            background: linear-gradient(90deg, #dc2626 0%, #991b1b 100%);
+            padding: 4px 12px; border-radius: 4px;
+            color: white; font-size: 14px; font-weight: 900; letter-spacing: 1px;
+            box-shadow: 0 4px 15px rgba(220, 38, 38, 0.4);
+            display: flex; align-items: center; gap: 8px; text-transform: uppercase;
+        }
+        .live-dot { width: 8px; height: 8px; background: white; border-radius: 50%; animation: blink 1.5s infinite; }
+
+        #rec-button {
+            position: absolute; top: 25px; right: 25px;
+            background: rgba(0, 0, 0, 0.4); border: 1px solid rgba(255, 255, 255, 0.3);
+            padding: 6px 16px; border-radius: 50px; color: white;
+            font-size: 12px; font-weight: 700; letter-spacing: 1px;
+            display: flex; align-items: center; gap: 8px; cursor: pointer;
+            backdrop-filter: blur(8px); transition: all 0.2s;
+        }
+        #rec-dot { width: 10px; height: 10px; background: #ef4444; border-radius: 50%; }
+        .recording { background: rgba(220, 38, 38, 0.9) !important; border-color: #ef4444 !important; }
+        .recording #rec-dot { animation: pulse 1s infinite; background: white; }
+
+        /* FACEBOOK BUTTON */
+        #fb-button {
+            position: absolute; top: 25px; right: 130px;
+            background: #1877f2; border: 1px solid rgba(255, 255, 255, 0.2);
+            padding: 6px 16px; border-radius: 50px; color: white;
+            font-size: 12px; font-weight: 700; letter-spacing: 1px;
+            display: flex; align-items: center; gap: 8px; cursor: pointer;
+            box-shadow: 0 4px 15px rgba(24, 119, 242, 0.4);
+            backdrop-filter: blur(8px); transition: all 0.2s;
+        }
+        #fb-button:hover { background: #166fe5; transform: scale(1.05); }
+        #fb-icon { width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; font-family: 'Anton', sans-serif; font-size: 14px; }
+
+        /* YOUTUBE BUTTON */
+        #yt-button {
+            position: absolute; top: 25px; right: 240px;
+            background: #FF0000; border: 1px solid rgba(255, 255, 255, 0.2);
+            padding: 6px 16px; border-radius: 50px; color: white;
+            font-size: 12px; font-weight: 700; letter-spacing: 1px;
+            display: flex; align-items: center; gap: 8px; cursor: pointer;
+            box-shadow: 0 4px 15px rgba(255, 0, 0, 0.4);
+            backdrop-filter: blur(8px); transition: all 0.2s;
+        }
+        #yt-button:hover { background: #cc0000; transform: scale(1.05); }
+        #yt-icon { width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; font-family: 'Anton', sans-serif; font-size: 10px; background: white; color: #FF0000; border-radius: 4px; padding: 2px; }
+
+        /* SCREENS */
+        #setup-screen { position: absolute; inset: 0; z-index: 50; background: radial-gradient(circle at center, #0f172a 0%, #000000 100%); display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        .input-field { background: rgba(255,255,255,0.05); border: 2px solid rgba(255,255,255,0.1); color: #60a5fa; font-size: 4rem; text-align: center; font-weight: 700; letter-spacing: 0.5rem; width: 320px; padding: 1rem; border-radius: 1rem; outline: none; transition: all 0.3s; font-family: 'Anton', sans-serif; margin-bottom: 2rem; }
+        .start-btn { background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%); color: white; border: none; padding: 1rem 4rem; border-radius: 50px; font-size: 1.1rem; font-weight: 800; letter-spacing: 2px; cursor: pointer; box-shadow: 0 10px 30px rgba(37, 99, 235, 0.3); text-transform: uppercase; }
+        
+        /* INSTRUCTION MODAL */
+        .help-modal {
+            position: absolute; inset: 0; z-index: 60;
+            background: rgba(0,0,0,0.9); backdrop-filter: blur(8px);
+            display: flex; align-items: center; justify-content: center;
+        }
+        .modal-card {
+            background: #1e1e1e; width: 90%; max-width: 450px; padding: 30px; border-radius: 20px;
+            text-align: center; border: 1px solid #333; color: white; box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+        }
+        .step-row { display: flex; align-items: center; text-align: left; margin-bottom: 15px; color: #ddd; font-size: 14px; }
+        .step-num { 
+            display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+            width: 28px; height: 28px; background: #3b82f6; border-radius: 50%; 
+            color: white; font-weight: bold; font-size: 14px; margin-right: 15px; 
+        }
+        
+        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+        @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(0.8); } 100% { transform: scale(1); } }
     </style>
 </head>
 <body>
-    <audio id="audio-four" src="four.mp3" preload="auto"></audio>
-    <audio id="audio-six" src="six.mp3" preload="auto"></audio>
-    <audio id="audio-wicket" src="wicket.mp3" preload="auto"></audio>
 
     <div id="setup-screen">
-        <h1 style="font-family: 'Anton'; font-size: 3rem; color: white; margin-bottom: 0.5rem; letter-spacing: 2px;">BROADCAST ENGINE</h1>
-        <p style="color: #94a3b8; font-size: 0.9rem; font-weight: bold; margin-bottom: 1rem; text-transform: uppercase; letter-spacing: 1px;">Enter Match Code</p>
+        <h1 style="font-family: 'Anton'; font-size: 3rem; color: white; margin-bottom: 0.5rem; letter-spacing: 2px;">BROADCAST UNIT</h1>
+        <p style="color: #94a3b8; font-size: 0.9rem; font-weight: bold; margin-bottom: 1rem; text-transform: uppercase; letter-spacing: 1px; font-family: 'Apple SD Gothic Neo';">Enter Match ID</p>
         <input type="text" id="match-id" class="input-field" placeholder="0000" maxlength="4" inputmode="numeric">
-        <button onclick="startOverlay()" class="start-btn">GO LIVE</button>
+        <button onclick="connectToMatch()" class="start-btn">Start Camera</button>
     </div>
 
     <div id="app-container" style="display: none;">
+        <div id="controls-layer">
+            <div id="status-pill" class="hud-item"><div class="live-dot"></div> LIVE</div>
+            
+            <div id="yt-button" class="hud-item" onclick="showYtHelp()">
+                <div id="yt-icon">▶</div> YT LIVE
+            </div>
+
+            <div id="fb-button" class="hud-item" onclick="showFbHelp()">
+                <div id="fb-icon">f</div> FB LIVE
+            </div>
+
+            <div id="rec-button" class="hud-item" onclick="toggleRecording()"><div id="rec-dot"></div> REC</div>
+        </div>
+        <video id="video-source" autoplay playsinline muted></video>
         <canvas id="broadcast-canvas"></canvas>
     </div>
 
+    <div id="fb-help-modal" class="help-modal" style="display: none;">
+        <div class="modal-card">
+            <h2 style="font-family: 'Anton'; font-size: 28px; margin-bottom: 25px; color: #1877f2;">FACEBOOK LIVE SETUP</h2>
+            <div style="margin-bottom: 25px;">
+                <div class="step-row">
+                    <div class="step-num" style="background:#1877f2">1</div>
+                    <div>Click <b>"OPEN FACEBOOK"</b> below.</div>
+                </div>
+                <div class="step-row">
+                    <div class="step-num" style="background:#1877f2">2</div>
+                    <div>Select <b>"Webcam"</b> as video source.</div>
+                </div>
+                <div class="step-row" style="background: rgba(239, 68, 68, 0.1); padding: 10px; border-radius: 8px; border-left: 3px solid #ef4444;">
+                    <div class="step-num" style="background: #ef4444;">3</div>
+                    <div><b>IMPORTANT:</b> Click <b>"Start Screen Share"</b>.<br>Do NOT use the default camera.</div>
+                </div>
+                <div class="step-row">
+                    <div class="step-num" style="background:#1877f2">4</div>
+                    <div>Select <b>"Chrome Tab"</b> → <b>"Pro Broadcast Unit"</b>.</div>
+                </div>
+            </div>
+            <div style="display: flex; gap: 10px;">
+                <button onclick="closeHelp('fb')" style="flex: 1; padding: 14px; background: #333; color: white; border: none; border-radius: 10px; font-weight: bold; cursor: pointer;">CANCEL</button>
+                <button onclick="proceedToFb()" style="flex: 1; padding: 14px; background: #1877f2; color: white; border: none; border-radius: 10px; font-weight: bold; cursor: pointer;">OPEN FACEBOOK</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="yt-help-modal" class="help-modal" style="display: none;">
+        <div class="modal-card">
+            <h2 style="font-family: 'Anton'; font-size: 28px; margin-bottom: 15px; color: #FF0000;">YOUTUBE LIVE SETUP</h2>
+            <p style="color: #bbb; font-size: 13px; margin-bottom: 20px;">
+                ⚠️ YouTube's native website <b>does NOT support Screen Sharing</b> (only webcam). You must use <b>StreamYard (Free)</b> to broadcast this scoreboard without OBS.
+            </p>
+            
+            <div style="margin-bottom: 25px;">
+                <div class="step-row">
+                    <div class="step-num" style="background:#FF0000">1</div>
+                    <div>Click <b>"OPEN STREAMYARD"</b> below.</div>
+                </div>
+                <div class="step-row">
+                    <div class="step-num" style="background:#FF0000">2</div>
+                    <div>Login & Create a Broadcast -> <b>YouTube</b>.</div>
+                </div>
+                <div class="step-row">
+                    <div class="step-num" style="background:#FF0000">3</div>
+                    <div>Click <b>"Present"</b> -> <b>"Share Screen"</b>.</div>
+                </div>
+                <div class="step-row">
+                    <div class="step-num" style="background:#FF0000">4</div>
+                    <div>Select <b>"Chrome Tab"</b> → <b>"Pro Broadcast Unit"</b>.</div>
+                </div>
+            </div>
+            <div style="display: flex; gap: 10px;">
+                <button onclick="closeHelp('yt')" style="flex: 1; padding: 14px; background: #333; color: white; border: none; border-radius: 10px; font-weight: bold; cursor: pointer;">CANCEL</button>
+                <button onclick="proceedToStreamYard()" style="flex: 1; padding: 14px; background: #FF0000; color: white; border: none; border-radius: 10px; font-weight: bold; cursor: pointer;">OPEN STREAMYARD</button>
+            </div>
+        </div>
+    </div>
+
     <script>
-        // --- FIREBASE CONFIG ---
         const firebaseConfig = { apiKey: "AIzaSyBqcD59IAPpKqk98oDZkgzgkoVZ8b8LGgY", authDomain: "livecricketscoring-92087.firebaseapp.com", databaseURL: "https://livecricketscoring-92087-default-rtdb.firebaseio.com", projectId: "livecricketscoring-92087", storageBucket: "livecricketscoring-92087.firebasestorage.app", messagingSenderId: "522927197627", appId: "1:522927197627:web:f1df5db736cae96893089e" };
         if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore();
 
-        // --- GLOBAL VARIABLES ---
-        let match = { t1: "HOME", t2: "AWAY", score: 0, wickets: 0, overs: 0, balls: 0, striker: { name: "", runs: 0, balls: 0 }, nonStriker: { name: "", runs: 0, balls: 0 }, bowler: { name: "", wkts: 0, runs: 0, balls: 0 }, currentOver: [], target: 0, totalOvers: 0, matchStatus: "", winner: "", margin: "", pom: null };
+        let match = { 
+            t1: "HOME", t2: "AWAY", score: 0, wickets: 0, overs: 0, balls: 0, 
+            striker: { name: "", runs: 0, balls: 0 }, 
+            nonStriker: { name: "", runs: 0, balls: 0 }, 
+            bowler: { name: "", wkts: 0, runs: 0, balls: 0 }, 
+            currentOver: [], target: 0, totalOvers: 0, matchStatus: "", winner: "", margin: "", pom: null 
+        };
         let team1Logo = null, team2Logo = null;
         let lastActionId = null, animType = null, animTime = 0;
+        
+        const video = document.getElementById('video-source');
         const canvas = document.getElementById('broadcast-canvas');
         const ctx = canvas.getContext('2d');
+        let recorder, chunks = [], isRecording = false;
 
-        // --- RESIZE LOGIC ---
-        window.onload = function() { resizeCanvas(); window.addEventListener('resize', resizeCanvas); };
-        function resizeCanvas() { const dpr = window.devicePixelRatio || 1; canvas.width = window.innerWidth * dpr; canvas.height = window.innerHeight * dpr; ctx.scale(dpr, dpr); canvas.style.width = window.innerWidth + 'px'; canvas.style.height = window.innerHeight + 'px'; }
-        
-        // --- STARTUP LOGIC ---
-        function startOverlay() { 
-            const id = document.getElementById('match-id').value; 
-            if(!id) return alert("Please enter Match ID"); 
-            document.getElementById('setup-screen').style.display = 'none'; 
-            document.getElementById('app-container').style.display = 'block'; 
-            requestAnimationFrame(renderLoop); 
-            listenToDB(id); 
+        window.onload = function() {
+            const params = new URLSearchParams(window.location.search);
+            if(params.has('id')) { document.getElementById('match-id').value = params.get('id'); connectToMatch(); }
+            window.addEventListener('resize', resizeCanvas);
+            window.addEventListener('orientationchange', () => { setTimeout(resizeCanvas, 100); });
+        };
+
+        function resizeCanvas() {
+            const dpr = window.devicePixelRatio || 1;
+            canvas.width = window.innerWidth * dpr;
+            canvas.height = window.innerHeight * dpr;
+            ctx.scale(dpr, dpr);
+            canvas.style.width = window.innerWidth + 'px';
+            canvas.style.height = window.innerHeight + 'px';
         }
 
-        // --- DATABASE LISTENER ---
-        function listenToDB(id) { 
-            db.collection("live_matches").doc(id).onSnapshot(doc => { 
-                if(doc.exists) { 
-                    const data = doc.data(); 
-                    match = { ...match, ...data }; 
-                    if(data.t1Logo && (!team1Logo || team1Logo.src !== data.t1Logo)) { team1Logo = new Image(); team1Logo.src = data.t1Logo; } 
-                    if(data.t2Logo && (!team2Logo || team2Logo.src !== data.t2Logo)) { team2Logo = new Image(); team2Logo.src = data.t2Logo; } 
-                    if (data.lastAction && data.lastAction.id !== lastActionId) { lastActionId = data.lastAction.id; triggerAnim(data.lastAction.type); } 
-                } 
-            }); 
+        function connectToMatch() {
+            const id = document.getElementById('match-id').value;
+            if(!id) return alert("Please enter Match ID");
+            const constraints = { video: { facingMode: "environment", width: { ideal: 3840 }, height: { ideal: 2160 } }, audio: true };
+            navigator.mediaDevices.getUserMedia(constraints).then(stream => {
+                video.srcObject = stream;
+                video.play();
+                document.getElementById('setup-screen').style.display = 'none';
+                document.getElementById('app-container').style.display = 'block';
+                resizeCanvas();
+                requestAnimationFrame(renderLoop);
+                listenToDB(id);
+            }).catch(e => alert("Camera Error: " + e.message));
         }
 
-        function triggerAnim(type) {
-            animType = type; animTime = Date.now();
-            const audioId = type === '4' ? 'audio-four' : type === '6' ? 'audio-six' : type === 'W' ? 'audio-wicket' : null;
-            if (audioId) document.getElementById(audioId).play().catch(e => console.log("Audio play blocked"));
+        function listenToDB(id) {
+            db.collection("live_matches").doc(id).onSnapshot(doc => {
+                if(doc.exists) {
+                    const data = doc.data();
+                    match = { ...match, ...data };
+                    if(data.t1Logo && (!team1Logo || team1Logo.src !== data.t1Logo)) { team1Logo = new Image(); team1Logo.src = data.t1Logo; }
+                    if(data.t2Logo && (!team2Logo || team2Logo.src !== data.t2Logo)) { team2Logo = new Image(); team2Logo.src = data.t2Logo; }
+                    if (data.lastAction && data.lastAction.id !== lastActionId) { lastActionId = data.lastAction.id; triggerAnim(data.lastAction.type); }
+                }
+            });
         }
 
-        // --- RENDER LOOP ---
-        function renderLoop() { 
-    const w = window.innerWidth; const h = window.innerHeight; 
-    ctx.clearRect(0, 0, w, h); 
-    
-    // 1. HIGHEST PRIORITY: Wicket Dismissal Card (7 Seconds)
-    if (match.showDismissalCard === true && match.dismissalData) {
-        drawDismissalCard(ctx, w, h);
-    }
-    // 2. Match Summary
-    else if (match.matchStatus === "COMPLETE" || match.showSummaryOverlay === true) {
-        drawProfessionalSummary(ctx, w, h);
-    } 
-    // 3. Standard Game
-    else { 
-        drawICCScoreboard(ctx, w, h); 
-        drawPopups(ctx, w, h); 
-    } 
-    requestAnimationFrame(renderLoop); 
-}
-
-        // --- HELPERS ---
-        function formatTeamName(name) { if (!name) return "TEAM"; let formatted = name.toUpperCase(); formatted = formatted.replace(/\bCRICKET CLUB\b/g, "C.C"); formatted = formatted.replace(/\bCRICKET\b/g, "C.C"); formatted = formatted.replace(/\bCC\b/g, "C.C"); return formatted; }
-        function formatPlayerName(fullName) { if (!fullName) return ""; const parts = fullName.trim().split(" "); if (parts.length === 1) return parts[0]; return `${parts[0]} ${parts[parts.length - 1].charAt(0)}.`; }
-        function drawRoundRect(c, x, y, w, h, r) { if (w < 2 * r) r = w / 2; if (h < 2 * r) r = h / 2; c.beginPath(); c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r); c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath(); }
-        function drawLogo(c, name, img, x, y, s, isLeft) { c.save(); c.beginPath(); c.arc(x + s/2, y + s/2, s/2, 0, Math.PI*2); c.fillStyle = "white"; c.fill(); c.clip(); if(img) c.drawImage(img, x, y, s, s); else { c.fillStyle = isLeft ? "#059669" : "#dc2626"; c.fillRect(x, y, s, s); c.fillStyle = "white"; c.textAlign = "center"; c.textBaseline = "middle"; c.font = `bold ${s*0.5}px 'Roboto'`; c.fillText(name.substring(0,2), x+s/2, y+s/2); } c.restore(); }
-        
-        // Smart Text Scaling Helper
-        function fitText(c, text, x, y, maxWidth, initialFontSize, weight, fontFace) { 
-            let fontSize = initialFontSize; 
-            c.font = `${weight} ${fontSize}px '${fontFace}'`; 
-            let width = c.measureText(text).width; 
+        function renderLoop() {
+            const w = window.innerWidth;
+            const h = window.innerHeight;
             
-            // Shrink until fits
-            while (width > maxWidth && fontSize > (initialFontSize * 0.5)) { 
-                fontSize -= 2; 
-                c.font = `${weight} ${fontSize}px '${fontFace}'`; 
-                width = c.measureText(text).width; 
-            } 
-            c.fillText(text, x, y); 
-        }
-
-        function drawBubble(c, b, x, y, r) { let txt = b.toString(); let bgColor = txt === '4' ? "#3b82f6" : txt === '6' ? "#22c55e" : (txt.includes('W') && !txt.includes('WD')) ? "#ef4444" : (txt.includes('WD') || txt.includes('NB')) ? "#fbbf24" : "#f1f5f9"; c.beginPath(); c.arc(x, y, r, 0, Math.PI * 2); c.fillStyle = bgColor; c.fill(); c.fillStyle = (bgColor === "#fbbf24" || bgColor === "#f1f5f9") ? "black" : "white"; c.fillText(txt, x, y); }
-        function drawPopups(c, w, h) { if (!animType) return; const now = Date.now(); if (now - animTime > 3000) { animType = null; return; } c.save(); const startX = w * 0.05; const startY = h - (h * 0.13) - (h * 0.06); c.translate(startX, startY); const t = (now - animTime) / 300; const scale = t < 1 ? (Math.sin(t * Math.PI/2) * 1.1) : 1.0; c.scale(scale, scale); c.textAlign = "left"; c.textBaseline = "bottom"; const fontSize = h * 0.08; c.font = `400 ${fontSize}px 'Anton'`; if (animType === '4') { c.fillStyle = "#3b82f6"; c.fillText("FOUR RUNS", 0, 0); } else if (animType === '6') { c.fillStyle = "#22c55e"; c.fillText("SIX RUNS", 0, 0); } else if (animType === 'W') { c.fillStyle = "#ef4444"; c.fillText("WICKET", 0, 0); } c.restore(); }
-
-        // --- DRAW: STANDARD LOWER THIRD SCOREBOARD ---
-        function drawICCScoreboard(c, w, h) {
-            const barH = h * 0.13; const marginX = w * 0.02; const bottomY = h - barH - (h * 0.02); const pillW = w - (marginX * 2); const pillX = marginX;
-            c.save(); c.fillStyle = "#05081c"; c.shadowColor = "rgba(0,0,0,0.5)"; c.shadowBlur = 10; drawRoundRect(c, pillX, bottomY, pillW, barH, 12); c.fill();
-            c.beginPath(); c.moveTo(pillX + 20, bottomY); c.lineTo(pillX + pillW - 20, bottomY); c.lineWidth = 4; c.strokeStyle = "#fbbf24"; c.stroke(); c.restore();
-
-            const divLeft = pillX + (pillW * 0.22); const divRight = pillX + (pillW * 0.78); const centerX = pillX + (pillW * 0.5);
-            const drawVerticalLine = (x) => { c.save(); c.beginPath(); c.moveTo(x, bottomY + (barH * 0.15)); c.lineTo(x, bottomY + (barH * 0.85)); c.strokeStyle = "rgba(255,255,255,0.4)"; c.lineWidth = 2.5; c.stroke(); c.restore(); };
-            drawVerticalLine(divLeft); drawVerticalLine(divRight);
-
-            const logoS = barH * 0.60; const logoY = bottomY + (barH - logoS) / 2;
-            
-            drawLogo(c, match.t1 || "HOME", team1Logo, pillX + 15, logoY, logoS, true);
-            const t1NameX = pillX + 25 + logoS; c.textAlign = "left"; c.fillStyle = "white"; fitText(c, formatTeamName(match.t1 || "HOME"), t1NameX, bottomY + barH * 0.45, (divLeft - t1NameX) - 10, barH * 0.22, '700', 'Anton');
-            c.fillStyle = "#94a3b8"; c.font = `700 ${barH * 0.14}px 'Roboto'`; c.fillText("BATTING", t1NameX, bottomY + barH * 0.75);
-
-            drawLogo(c, match.t2 || "AWAY", team2Logo, pillX + pillW - 15 - logoS, logoY, logoS, false);
-            const t2NameX = pillX + pillW - 25 - logoS; c.textAlign = "right"; c.fillStyle = "white"; fitText(c, formatTeamName(match.t2 || "AWAY"), t2NameX, bottomY + barH * 0.45, (t2NameX - divRight) - 10, barH * 0.22, '700', 'Anton');
-            c.fillStyle = "#94a3b8"; c.font = `700 ${barH * 0.14}px 'Roboto'`; c.fillText("BOWLING", t2NameX, bottomY + barH * 0.75);
-
-            const batX = divLeft + 20; const sName = match.striker && match.striker.name ? formatPlayerName(match.striker.name) : "-"; const nsName = match.nonStriker && match.nonStriker.name ? formatPlayerName(match.nonStriker.name) : "-";
-            c.textAlign = "left"; const indSize = barH * 0.08; c.save(); c.beginPath(); c.moveTo(batX, bottomY + barH * 0.38); c.lineTo(batX, bottomY + barH * 0.38 + indSize); c.lineTo(batX + indSize, bottomY + barH * 0.38 + (indSize/2)); c.fillStyle = "white"; c.fill(); c.restore();
-            c.fillStyle = "white"; c.font = `700 ${barH*0.19}px 'Roboto'`; const nameWidth = c.measureText(sName).width; c.fillText(sName, batX + indSize + 8, bottomY + barH * 0.45);
-            c.fillStyle = "#fbbf24"; c.fillText(`${match.striker?.runs||0} (${match.striker?.balls||0})`, batX + indSize + 8 + nameWidth + 10, bottomY + barH * 0.45);
-            c.fillStyle = "#9ca3af"; c.font = `500 ${barH*0.17}px 'Roboto'`; c.fillText(nsName, batX, bottomY + barH * 0.75);
-            const nsNameWidth = c.measureText(nsName).width; c.fillText(`${match.nonStriker?.runs||0} (${match.nonStriker?.balls||0})`, batX + nsNameWidth + 10, bottomY + barH * 0.75);
-
-            const bowlX = divRight - 20; c.textAlign = "right"; c.fillStyle = "white"; c.font = `700 ${barH*0.19}px 'Roboto'`; c.fillText(match.bowler && match.bowler.name ? formatPlayerName(match.bowler.name) : "-", bowlX, bottomY + barH * 0.35);
-            c.fillStyle = "#9ca3af"; c.font = `500 ${barH*0.14}px 'Roboto'`; c.fillText(`${match.bowler?.wkts||0}-${match.bowler?.runs||0} (${match.bowler?.balls||0})`, bowlX, bottomY + barH * 0.52);
-
-            if (match.currentOver && Array.isArray(match.currentOver)) {
-                const balls = match.currentOver; let bubbleR = barH * 0.10; if (balls.length > 6) { bubbleR = (barH * 0.10) * (6 / balls.length); } let spacing = bubbleR * 2.3; let bx = bowlX - bubbleR;
-                c.textAlign = "center"; c.textBaseline = "middle"; c.font = `700 ${bubbleR*0.8}px 'Roboto'`; const ballsToDraw = [...balls].reverse();
-                ballsToDraw.forEach(b => { drawBubble(c, b, bx, bottomY + barH * 0.78, bubbleR); bx -= spacing; }); c.textBaseline = "alphabetic";
-            }
-
-            if (match.target > 0) {
-                c.save(); c.beginPath(); c.moveTo(centerX, bottomY + barH * 0.10); c.lineTo(centerX, bottomY + barH * 0.90); c.strokeStyle = "rgba(255,255,255,0.6)"; c.lineWidth = 3; c.stroke(); c.restore();
-                const scoreX = centerX - 40; c.textAlign = "right"; c.fillStyle = "#fbbf24"; c.font = `400 ${barH * 0.50}px 'Anton'`; c.fillText(`${match.score}/${match.wickets}`, scoreX, bottomY + barH * 0.55);
-                c.fillStyle = "white"; c.font = `500 ${barH*0.14}px 'Roboto'`; c.fillText(`OVERS ${match.overs}.${match.balls}`, scoreX, bottomY + barH * 0.82);
-                const targetX = centerX + 40; c.textAlign = "left"; c.fillStyle = "#fbbf24"; c.font = `700 ${barH * 0.15}px 'Roboto'`; c.fillText("TO WIN", targetX, bottomY + barH * 0.25); 
-                const runsNeeded = Math.max(0, match.target - match.score); const ballsRem = Math.max(0, (match.totalOvers * 6) - (match.overs * 6 + match.balls));
-                const eqY = bottomY + barH * 0.62; c.fillStyle = "#9ca3af"; c.font = `400 ${barH * 0.35}px 'Anton'`; c.fillText(runsNeeded, targetX, eqY);
-                const w1 = c.measureText(runsNeeded).width; c.font = `500 ${barH * 0.13}px 'Roboto'`; c.fillText("IN", targetX + w1 + 8, eqY);
-                const w2 = c.measureText("IN").width; c.font = `400 ${barH * 0.35}px 'Anton'`; c.fillText(ballsRem, targetX + w1 + w2 + 16, eqY);
-                const rrr = ballsRem > 0 ? (runsNeeded / (ballsRem/6)).toFixed(1) : "-";
-                c.fillStyle = "#6b7280"; c.font = `500 ${barH * 0.12}px 'Roboto'`; c.fillText(`TARGET ${match.target} • RRR ${rrr}`, targetX, bottomY + barH * 0.82);
+            if (video.readyState === video.HAVE_ENOUGH_DATA) {
+                const vidRatio = video.videoWidth / video.videoHeight;
+                const screenRatio = w / h;
+                let drawW, drawH, drawX, drawY;
+                if (screenRatio > vidRatio) {
+                    drawW = w; drawH = w / vidRatio; drawX = 0; drawY = (h - drawH) / 2;
+                } else {
+                    drawW = h * vidRatio; drawH = h; drawX = (w - drawW) / 2; drawY = 0;
+                }
+                ctx.drawImage(video, drawX, drawY, drawW, drawH);
             } else {
-                c.textAlign = "center"; 
-                c.fillStyle = "#fbbf24"; c.font = `400 ${barH * 0.55}px 'Anton'`; 
-                c.fillText(`${match.score}/${match.wickets}`, centerX, bottomY + barH * 0.58); 
-                c.fillStyle = "white"; c.font = `500 ${barH*0.16}px 'Roboto'`;
-                c.fillText(`OVERS ${match.overs}.${match.balls}`, centerX, bottomY + barH * 0.85);
+                ctx.clearRect(0, 0, w, h);
+            }
+            
+            if (match.matchStatus === "COMPLETE") {
+                drawMatchSummary(ctx, w, h);
+            } else {
+                drawICCScoreboard(ctx, w, h);
+                drawPopups(ctx, w, h);
+            }
+            requestAnimationFrame(renderLoop);
+        }
+
+        function formatTeamName(name) {
+            if (!name) return "TEAM";
+            let formatted = name.toUpperCase();
+            formatted = formatted.replace(/\bCRICKET CLUB\b/g, "C.C");
+            formatted = formatted.replace(/\bCRICKET\b/g, "C.C");
+            return formatted;
+        }
+
+        function formatPlayerName(fullName) {
+            if (!fullName) return "";
+            const parts = fullName.trim().split(" ");
+            if (parts.length === 1) return parts[0]; 
+            const firstName = parts[0];
+            const lastInitial = parts[parts.length - 1].charAt(0);
+            return `${firstName} ${lastInitial}.`;
+        }
+
+        // --- FIXED STRICT GRID LAYOUT ---
+        function drawICCScoreboard(c, w, h) {
+            const barH = h * 0.14; 
+            const marginX = w * 0.02; 
+            const bottomY = h - barH - (h * 0.04); 
+            const pillW = w - (marginX * 2);
+            const pillX = marginX;
+
+            c.save();
+            c.fillStyle = "#05081c"; 
+            c.shadowColor = "rgba(0,0,0,0.6)"; c.shadowBlur = 12;
+            drawRoundRect(c, pillX, bottomY, pillW, barH, 16);
+            c.fill();
+            
+            c.beginPath(); c.moveTo(pillX + 20, bottomY); c.lineTo(pillX + pillW - 20, bottomY);
+            c.lineWidth = 5; c.strokeStyle = "#ffcc00"; c.stroke();
+            c.restore();
+
+            const divLeft = pillX + (pillW * 0.18);
+            const divRight = pillX + (pillW * 0.82);
+            const centerX = pillX + (pillW * 0.5);
+            
+            const drawVerticalLine = (x) => {
+                c.beginPath(); c.moveTo(x, bottomY + barH * 0.2); c.lineTo(x, bottomY + barH * 0.8);
+                c.strokeStyle = "rgba(255,255,255,0.2)"; c.lineWidth = 1.5; c.stroke();
+            };
+            drawVerticalLine(divLeft);
+            drawVerticalLine(divRight);
+
+            const logoS = barH * 0.55; 
+            const logoY = bottomY + (barH - logoS) / 2;
+
+            // 1. LEFT TEAM
+            drawLogo(c, match.t1 || "HOME", team1Logo, pillX + 15, logoY, logoS, true);
+            const t1NameX = pillX + 20 + logoS;
+            c.textAlign = "left"; 
+            c.fillStyle = "white"; 
+            fitText(c, formatTeamName(match.t1 || "HOME"), t1NameX, bottomY + barH * 0.42, (divLeft - t1NameX) - 5, barH * 0.25, '400', 'Anton');
+            c.fillStyle = "#6b7280"; c.font = `700 ${barH * 0.12}px 'Apple SD Gothic Neo'`; 
+            c.fillText("BATTING", t1NameX, bottomY + barH * 0.7);
+
+            // 2. RIGHT TEAM
+            drawLogo(c, match.t2 || "AWAY", team2Logo, pillX + pillW - 15 - logoS, logoY, logoS, false);
+            const t2NameX = pillX + pillW - 20 - logoS;
+            c.textAlign = "right"; 
+            c.fillStyle = "white"; 
+            fitText(c, formatTeamName(match.t2 || "AWAY"), t2NameX, bottomY + barH * 0.42, (t2NameX - divRight) - 5, barH * 0.25, '400', 'Anton');
+            c.fillStyle = "#6b7280"; c.font = `700 ${barH * 0.12}px 'Apple SD Gothic Neo'`; 
+            c.fillText("BOWLING", t2NameX, bottomY + barH * 0.7);
+
+            // 3. BATTING STATS
+            const batX = divLeft + 15; 
+            const sName = match.striker && match.striker.name ? formatPlayerName(match.striker.name) : "-";
+            const nsName = match.nonStriker && match.nonStriker.name ? formatPlayerName(match.nonStriker.name) : "-";
+            const sRuns = match.striker ? match.striker.runs : 0;
+            const sBalls = match.striker ? match.striker.balls : 0;
+            const nsRuns = match.nonStriker ? match.nonStriker.runs : 0;
+            const nsBalls = match.nonStriker ? match.nonStriker.balls : 0;
+
+            c.textAlign = "left";
+            c.fillStyle = "white"; c.font = `700 ${barH*0.20}px 'Apple SD Gothic Neo'`; 
+            
+            const indSize = barH * 0.05; 
+            c.save(); c.beginPath(); c.moveTo(batX, bottomY + barH * 0.39); c.lineTo(batX, bottomY + barH * 0.39 + indSize); c.lineTo(batX + indSize, bottomY + barH * 0.39 + (indSize/2)); c.fillStyle = "white"; c.fill(); c.restore();
+
+            const nameWidth = c.measureText(sName).width;
+            c.fillText(sName, batX + indSize + 5, bottomY + barH * 0.42);
+            
+            c.fillStyle = "#ffcc00"; 
+            const scoreX = Math.max(batX + indSize + 5 + nameWidth + 12, batX + (pillW*0.07)); 
+            c.fillText(`${sRuns} (${sBalls})`, scoreX, bottomY + barH * 0.42);
+
+            c.fillStyle = "#9ca3af"; c.font = `700 ${barH*0.18}px 'Apple SD Gothic Neo'`;
+            c.fillText(nsName, batX, bottomY + barH * 0.75);
+            c.fillText(`${nsRuns} (${nsBalls})`, batX + (pillW*0.07), bottomY + barH * 0.75);
+
+            // 4. BOWLER STATS
+            const bowlX = divRight - 15;
+            c.textAlign = "right";
+            const bName = match.bowler && match.bowler.name ? formatPlayerName(match.bowler.name) : "-";
+            const bWkts = match.bowler ? match.bowler.wkts : 0;
+            const bRuns = match.bowler ? match.bowler.runs : 0;
+            const bBallsCount = match.bowler ? (match.bowler.balls !== undefined ? match.bowler.balls : 0) : 0;
+
+            c.fillStyle = "white"; c.font = `700 ${barH*0.22}px 'Apple SD Gothic Neo'`;
+            c.fillText(bName, bowlX, bottomY + barH * 0.35);
+            c.fillStyle = "#9ca3af"; c.font = `500 ${barH*0.14}px 'Apple SD Gothic Neo'`;
+            c.fillText(`${bWkts}-${bRuns} (${bBallsCount})`, bowlX, bottomY + barH * 0.52);
+
+            // Bubbles (Smart Resizing)
+            if (match.currentOver && Array.isArray(match.currentOver)) {
+                const balls = match.currentOver;
+                let bubbleR = barH * 0.12; 
+                if (balls.length > 6) { bubbleR = (barH * 0.12) * (6 / balls.length); }
+                let spacing = bubbleR * 2.2;
+                let bx = bowlX - bubbleR;
+                
+                c.textAlign = "center"; c.textBaseline = "middle";
+                c.font = `700 ${bubbleR*0.9}px 'Roboto'`; 
+
+                const ballsToDraw = [...balls].reverse();
+                ballsToDraw.forEach(b => { 
+                    drawBubble(c, b, bx, bottomY + barH * 0.78, bubbleR); 
+                    bx -= spacing; 
+                });
+                c.textBaseline = "alphabetic";
+            }
+
+            // --- 5. CENTER BLOCK ---
+            if (match.target > 0) {
+                // *** SECOND INNINGS ***
+                c.textAlign = "right";
+                c.fillStyle = "#ffcc00"; c.font = `400 ${barH * 0.55}px 'Anton'`;
+                c.fillText(`${match.score}/${match.wickets}`, centerX - 40, bottomY + barH * 0.65);
+                
+                c.fillStyle = "white"; c.font = `500 ${barH*0.16}px 'Apple SD Gothic Neo'`;
+                c.fillText(`OVERS ${match.overs}.${match.balls}`, centerX - 40, bottomY + barH * 0.85);
+
+                drawVerticalLine(centerX - 10); 
+
+                // --- TARGET BLOCK (ADJUSTED Y) ---
+                c.textAlign = "left";
+                const startX = centerX + 15; 
+
+                // 1. "TO WIN" (Moved UP)
+                c.fillStyle = "#ffcc00"; 
+                c.font = `700 ${barH * 0.20}px 'Apple SD Gothic Neo'`;
+                c.fillText("TO WIN", startX, bottomY + barH * 0.28); 
+
+                // 2. EQUATION (Moved DOWN)
+                let cursorX = startX;
+                const runsNeeded = match.target - match.score;
+                const ballsBowled = (match.overs * 6) + match.balls;
+                const ballsRem = (match.totalOvers * 6) - ballsBowled;
+                
+                const eqY = bottomY + barH * 0.62; 
+
+                // "22"
+                c.fillStyle = "white";
+                c.font = `400 ${barH * 0.32}px 'Anton'`; 
+                c.fillText(runsNeeded, cursorX, eqY);
+                cursorX += c.measureText(runsNeeded).width + 5;
+
+                // "RUNS"
+                c.fillStyle = "#9ca3af"; 
+                c.font = `700 ${barH * 0.16}px 'Apple SD Gothic Neo'`;
+                c.fillText("RUNS", cursorX, eqY);
+                cursorX += c.measureText("RUNS").width + 5;
+
+                // "in"
+                c.font = `500 ${barH * 0.14}px 'Apple SD Gothic Neo'`;
+                c.fillText("in", cursorX, eqY);
+                cursorX += c.measureText("in").width + 5;
+
+                // "13"
+                c.fillStyle = "white";
+                c.font = `400 ${barH * 0.32}px 'Anton'`;
+                c.fillText(ballsRem, cursorX, eqY);
+                cursorX += c.measureText(ballsRem).width + 5;
+
+                // "BALLS"
+                c.fillStyle = "#9ca3af";
+                c.font = `700 ${barH * 0.16}px 'Apple SD Gothic Neo'`;
+                c.fillText("BALLS", cursorX, eqY);
+
+                // 3. TARGET & RATES
+                const crr = ballsBowled > 0 ? (match.score / (ballsBowled/6)).toFixed(1) : "0.0";
+                const rrr = ballsRem > 0 ? (runsNeeded / (ballsRem/6)).toFixed(1) : runsNeeded;
+                
+                c.fillStyle = "#9ca3af"; 
+                c.font = `500 ${barH * 0.13}px 'Apple SD Gothic Neo'`;
+                c.fillText(`TARGET ${match.target} • CRR ${crr} • RRR ${rrr}`, startX, bottomY + barH * 0.85);
+
+            } else {
+                // *** FIRST INNINGS ***
+                c.textAlign = "center";
+                c.textBaseline = "middle"; 
+                c.fillStyle = "#ffcc00"; 
+                c.font = `400 ${barH * 0.60}px 'Anton'`; 
+                c.fillText(`${match.score}/${match.wickets}`, centerX, bottomY + barH * 0.42);
+                
+                c.fillStyle = "white"; c.font = `500 ${barH*0.18}px 'Apple SD Gothic Neo'`;
+                c.fillText(`OVERS ${match.overs}.${match.balls}`, centerX, bottomY + barH * 0.78);
+                c.textBaseline = "alphabetic"; 
             }
         }
 
-        // --- DRAW: PROFESSIONAL SUMMARY (BATTING & BOWLING MODES) ---
-function drawProfessionalSummary(c, w, h) {
-    // 1. SETUP & LAYOUT
-    const cardW = w * 0.82; 
-    const cardH = h * 0.72; 
-    const x = (w - cardW) / 2;
-    const y = (h - cardH) / 2 + (h * 0.05);
-
-    const headerH = cardH * 0.18; 
-    const footerH = cardH * 0.13; 
-
-    // Animation Timer
-    const time = Date.now() * 0.0015;
-
-    // A. MAIN CARD BACKGROUND
-    c.save();
-    c.shadowColor = "rgba(0,0,0,0.8)"; c.shadowBlur = 60; c.shadowOffsetY = 20;
-    const bgGrad = c.createLinearGradient(x, y, x, y + cardH);
-    bgGrad.addColorStop(0, "#020617");   
-    bgGrad.addColorStop(1, "#1e1b4b");   
-    c.fillStyle = bgGrad;
-    drawRoundRect(c, x, y, cardW, cardH, 20);
-    c.fill();
-    
-    // Border Glow
-    const borderGrad = c.createLinearGradient(x, y, x + cardW, y + cardH);
-    borderGrad.addColorStop(0, `hsl(${(time * 30) % 360}, 70%, 50%)`);
-    borderGrad.addColorStop(0.5, "#22d3ee"); 
-    borderGrad.addColorStop(1, `hsl(${(time * 30 + 180) % 360}, 70%, 50%)`);
-    c.lineWidth = 4;
-    c.strokeStyle = borderGrad;
-    c.stroke();
-    c.shadowColor = "transparent";
-
-    // B. HEADER SECTION
-    const logoSize = headerH * 0.9; 
-    const logoX = x + 30;
-    const logoY = y + (headerH - logoSize) / 2; 
-    
-    // Glassy Header BG
-    c.save();
-    c.beginPath(); 
-    c.moveTo(x + 20, y); c.lineTo(x + cardW - 20, y); 
-    c.quadraticCurveTo(x + cardW, y, x + cardW, y + 20); 
-    c.lineTo(x + cardW, y + headerH); c.lineTo(x, y + headerH); 
-    c.lineTo(x, y + 20); c.quadraticCurveTo(x, y, x + 20, y);
-    c.clip();
-    const hGrad = c.createLinearGradient(x, y, x, y + headerH);
-    hGrad.addColorStop(0, "rgba(56, 189, 248, 0.2)"); 
-    hGrad.addColorStop(1, "rgba(56, 189, 248, 0.0)");
-    c.fillStyle = hGrad;
-    c.fill();
-    c.beginPath(); c.moveTo(x, y+headerH); c.lineTo(x+cardW, y+headerH);
-    c.strokeStyle = "rgba(255,255,255,0.15)"; c.lineWidth = 2; c.stroke();
-    c.restore();
-
-    // Logo with Glare (Clean, No Shadow)
-    c.save();
-    const centerX = logoX + logoSize/2;
-    const centerY = logoY + logoSize/2;
-    const radius = logoSize/2 + 4; 
-    const glareGrad = c.createLinearGradient(logoX, logoY, logoX + logoSize, logoY + logoSize);
-    glareGrad.addColorStop(0, `hsl(${(time * 100) % 360}, 100%, 70%)`); 
-    glareGrad.addColorStop(0.5, "#ffffff"); 
-    glareGrad.addColorStop(1, `hsl(${(time * 100 + 180) % 360}, 100%, 70%)`); 
-    c.beginPath(); c.arc(centerX, centerY, radius, 0, Math.PI*2);
-    c.lineWidth = 3; c.strokeStyle = glareGrad; c.stroke(); // Clean stroke
-    c.fillStyle = "white"; c.fill();
-    c.restore();
-    drawLogo(c, match.t1, team1Logo, logoX, logoY, logoSize, true);
-
-    // Header Text
-    const textX = logoX + logoSize + 30;
-    const maxTextW = cardW - (textX - x) - 40; 
-    c.textAlign = "left"; c.textBaseline = "alphabetic"; c.fillStyle = "white";
-    c.shadowColor = "rgba(0,0,0,0.8)"; c.shadowBlur = 4; c.shadowOffsetY = 2;
-    fitText(c, (match.t1 || "TEAM NAME").toUpperCase(), textX, y + headerH * 0.55, maxTextW, cardH * 0.08, '900', 'Roboto Condensed');
-    
-    // Subtitle (Changes based on Type)
-    c.fillStyle = "#7dd3fc"; c.font = `700 ${cardH * 0.03}px 'Roboto'`; c.shadowBlur = 0; c.shadowOffsetY = 0;
-    const subTitle = (match.summaryType === "BOWLING") ? "BOWLING CARD" : "ICC CHAMPIONS TROPHY";
-    c.fillText(subTitle, textX, y + headerH * 0.85);
-
-    // C. DATA TABLE (Dynamic based on Mode)
-    const startY = y + headerH + (cardH * 0.05);
-    c.fillStyle = "#94a3b8"; c.font = `bold ${cardH * 0.028}px 'Roboto'`; c.textAlign = "left";
-
-    // --- MODE SWITCH: BATTING vs BOWLING ---
-    let dataList = [];
-    
-    if (match.summaryType === "BOWLING") {
-        // --- 1. BOWLING LAYOUT ---
-        // Headers: BOWLER | O | M | R | W | ECON
-        const colX = { 
-            name: x + 40, 
-            o: x + cardW * 0.55, 
-            m: x + cardW * 0.65, 
-            r: x + cardW * 0.75, 
-            w: x + cardW * 0.85, 
-            e: x + cardW * 0.95 
-        };
-
-        c.fillText("BOWLER", colX.name, startY);
-        c.textAlign = "right";
-        c.fillText("O", colX.o, startY);
-        c.fillText("M", colX.m, startY);
-        c.fillText("R", colX.r, startY);
-        c.fillText("W", colX.w, startY);
-        c.fillText("ECON", colX.e, startY);
-
-        dataList = match.bowlingCard || [];
-        
-        // Draw Bowling Rows
-        renderRows(c, dataList, startY, cardW, cardH, x, colX, "BOWLING");
-
-    } else {
-        // --- 2. BATTING LAYOUT (Default) ---
-        // Headers: BATTER | DISMISSAL | RUNS | BALLS
-        const colX = { 
-            name: x + 40, 
-            dismissal: x + cardW * 0.45, 
-            runs: x + cardW * 0.80, 
-            balls: x + cardW * 0.95 
-        };
-
-        c.fillText("BATTER", colX.name, startY);
-        c.fillText("DISMISSAL", colX.dismissal, startY);
-        c.textAlign = "right";
-        c.fillText("RUNS", colX.runs, startY);
-        c.fillText("BALLS", colX.balls, startY);
-
-        dataList = match.battingCard || [];
-        
-        // Draw Batting Rows
-        renderRows(c, dataList, startY, cardW, cardH, x, colX, "BATTING");
-    }
-
-    // D. FOOTER
-    const footerY = y + cardH - footerH;
-    c.save();
-    c.beginPath(); c.moveTo(x, footerY); c.lineTo(x + cardW, footerY);
-    c.lineTo(x + cardW, y + cardH - 20); c.quadraticCurveTo(x + cardW, y + cardH, x + cardW - 20, y + cardH);
-    c.lineTo(x + 20, y + cardH); c.quadraticCurveTo(x, y + cardH, x, y + cardH - 20);
-    c.closePath(); c.clip();
-    const fGrad = c.createLinearGradient(x, footerY, x, y + cardH);
-    fGrad.addColorStop(0, "#f1f5f9"); fGrad.addColorStop(1, "#cbd5e1"); 
-    c.fillStyle = fGrad; c.fill(); c.restore();
-
-    const fTextY = footerY + (footerH * 0.65);
-    c.fillStyle = "#0f172a"; c.textBaseline = "alphabetic";
-
-    c.textAlign = "left"; c.font = `bold ${cardH * 0.035}px 'Roboto'`;
-    c.fillText("EXTRAS " + (match.extras || 0), x + 40, fTextY);
-    c.textAlign = "center"; c.fillText("OVERS " + match.overs + "." + match.balls, x + cardW/2, fTextY);
-    c.textAlign = "right";
-    const scoreFont = `900 ${cardH * 0.075}px 'Roboto Condensed'`;
-    const scoreText = match.score + "-" + match.wickets;
-    c.font = scoreFont;
-    const scoreWidth = c.measureText(scoreText).width;
-    c.fillText(scoreText, x + cardW - 40, fTextY);
-    c.font = `bold ${cardH * 0.035}px 'Roboto'`;
-    c.fillText("TOTAL", x + cardW - 40 - scoreWidth - 20, fTextY);
-    c.restore();
-}
-
-// Helper to draw rows
-function renderRows(c, list, startY, cardW, cardH, x, colX, mode) {
-    let currentY = startY + (cardH * 0.04);
-    const rowH = cardH * 0.09;
-
-    c.save();
-    c.beginPath(); c.rect(x, currentY, cardW, cardH * 0.55); c.clip(); // Clip body area
-
-    list.forEach((p, i) => {
-        const rowY = currentY;
-        const textY = rowY + (rowH * 0.65);
-        
-        // Highlight logic
-        let isActive = false;
-        if (mode === "BATTING" && p.status.includes("NOT OUT")) isActive = true;
-        
-        if (isActive) {
-            const activeGrad = c.createLinearGradient(x, rowY, x + cardW, rowY);
-            activeGrad.addColorStop(0, "#0ea5e9"); activeGrad.addColorStop(1, "#0284c7"); 
-            c.fillStyle = activeGrad;
-        } else {
-            c.fillStyle = (i % 2 === 0) ? "rgba(255,255,255,0.05)" : "transparent";
+        function drawBubble(c, b, x, y, r) {
+            let txt = b.toString(); let upper = txt.toUpperCase(); 
+            let bgColor = "#f1f5f9"; let txtColor = "#0f172a"; 
+            if (txt === '4') { bgColor = "#3b82f6"; txtColor = "white"; }
+            else if (txt === '6') { bgColor = "#22c55e"; txtColor = "white"; }
+            else if (upper.includes('W') && !upper.includes('WD')) { bgColor = "#ef4444"; txtColor = "white"; }
+            else if (upper.includes('WD') || upper.includes('NB')) { bgColor = "#fbbf24"; txtColor = "black"; }
+            c.beginPath(); c.arc(x, y, r, 0, Math.PI * 2); c.fillStyle = bgColor; c.fill();
+            c.fillStyle = txtColor; c.fillText(txt, x, y);
         }
-        c.fillRect(x, rowY, cardW, rowH);
 
-        c.fillStyle = isActive ? "white" : (mode === "BATTING" && !isActive ? "#94a3b8" : "white"); // Batters out are grey, Bowlers always white
-        
-        c.textAlign = "left";
-        c.font = `700 ${cardH * 0.045}px 'Roboto Condensed'`;
-        c.fillText(p.name.toUpperCase(), colX.name, textY);
-
-        if (mode === "BOWLING") {
-            c.textAlign = "right";
-            c.font = `500 ${cardH * 0.045}px 'Roboto'`;
-            c.fillText(p.o, colX.o, textY);
-            c.fillText(p.m, colX.m, textY);
-            c.fillText(p.r, colX.r, textY);
-            c.font = `900 ${cardH * 0.05}px 'Roboto'`; // Bold Wickets
-            c.fillText(p.w, colX.w, textY);
-            c.font = `500 ${cardH * 0.045}px 'Roboto'`;
-            c.fillText(p.e, colX.e, textY);
-        } else {
-            // Batting Columns
-            c.font = `500 ${cardH * 0.03}px 'Roboto'`;
-            if (isActive) { c.fillStyle = "rgba(255,255,255,0.9)"; c.fillText("NOT OUT", colX.dismissal, textY); }
-            else { c.fillStyle = "#94a3b8"; c.fillText(p.status.toLowerCase(), colX.dismissal, textY); }
-
-            c.textAlign = "right";
-            c.font = `900 ${cardH * 0.055}px 'Roboto'`; c.fillStyle = "white";
-            c.fillText(p.runs, colX.runs, textY);
-            c.font = `500 ${cardH * 0.035}px 'Roboto'`; c.fillStyle = isActive ? "white" : "#94a3b8";
-            c.fillText(p.balls, colX.balls, textY);
+        function fitTextAlignRight(c, text, x, y, maxWidth, initialFontSize, weight, fontFace) {
+            let fontSize = initialFontSize; c.font = `${weight} ${fontSize}px '${fontFace}'`;
+            let width = c.measureText(text).width;
+            while (width > maxWidth && fontSize > (initialFontSize * 0.6)) { fontSize -= 2; c.font = `${weight} ${fontSize}px '${fontFace}'`; width = c.measureText(text).width; }
+            if (width > maxWidth) { while (width > maxWidth && text.length > 0) { text = text.slice(0, -1); width = c.measureText(text + "...").width; } text += "..."; }
+            c.fillText(text, x, y);
         }
-        currentY += rowH;
-    });
-    c.restore();
-}
-// --- DRAW: DISMISSAL CARD (BLUE GRADIENT STYLE) ---
-function drawDismissalCard(c, w, h) {
-    const d = match.dismissalData;
-    if(!d) return;
+        function fitText(c, text, x, y, maxWidth, initialFontSize, weight, fontFace) {
+            let fontSize = initialFontSize; c.font = `${weight} ${fontSize}px '${fontFace}'`;
+            let width = c.measureText(text).width;
+            while (width > maxWidth && fontSize > (initialFontSize * 0.6)) { fontSize -= 2; c.font = `${weight} ${fontSize}px '${fontFace}'`; width = c.measureText(text).width; }
+            if (width > maxWidth) { while (width > maxWidth && text.length > 0) { text = text.slice(0, -1); width = c.measureText(text + "...").width; } text += "..."; }
+            c.fillText(text, x, y);
+        }
+        function drawLogo(c, name, img, x, y, s, isLeft) {
+            c.save(); c.beginPath(); c.arc(x + s/2, y + s/2, s/2, 0, Math.PI*2); c.fillStyle = "white"; c.fill(); c.clip();
+            if(img) { c.drawImage(img, x, y, s, s); } else { c.fillStyle = isLeft ? "#059669" : "#dc2626"; c.fillRect(x, y, s, s); c.fillStyle = "white"; c.textAlign = "center"; c.textBaseline = "middle"; c.font = `bold ${s*0.5}px 'Roboto'`; c.fillText(name.substring(0,2), x+s/2, y+s/2); } c.restore();
+        }
+        function drawRoundRect(c, x, y, w, h, r) {
+            if (w < 2 * r) r = w / 2; if (h < 2 * r) r = h / 2;
+            c.beginPath(); c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r); c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath();
+        }
+        function triggerAnim(type) { animType = type; animTime = Date.now(); }
+        function drawPopups(c, w, h) {
+            if (!animType) return; const now = Date.now(); if (now - animTime > 3000) { animType = null; return; }
+            c.save(); const startX = w * 0.05; const startY = h - (h * 0.16) - (h * 0.06); c.translate(startX, startY);
+            const t = (now - animTime) / 300; const scale = t < 1 ? (Math.sin(t * Math.PI/2) * 1.1) : 1.0;
+            c.scale(scale, scale); c.textAlign = "left"; c.textBaseline = "bottom"; const fontSize = h * 0.08; c.font = `400 ${fontSize}px 'Anton'`;
+            if (animType === '4') { c.fillStyle = "#3b82f6"; c.fillText("FOUR RUNS", 0, 0); } else if (animType === '6') { c.fillStyle = "#22c55e"; c.fillText("SIX RUNS", 0, 0); } else if (animType === 'W') { c.fillStyle = "#ef4444"; c.fillText("WICKET", 0, 0); } c.restore();
+        }
+        function drawMatchSummary(c, w, h) {
+            const cardW = w * 0.6; const cardH = h * 0.5; const cardX = (w - cardW) / 2; const cardY = (h - cardH) / 2;
+            c.save(); const grad = c.createLinearGradient(cardX, cardY, cardX + cardW, cardY + cardH); grad.addColorStop(0, "#0f172a"); grad.addColorStop(1, "#1e293b");
+            c.shadowColor = "rgba(0,0,0,0.8)"; c.shadowBlur = 40; drawRoundRect(c, cardX, cardY, cardW, cardH, 20); c.fillStyle = grad; c.fill();
+            c.lineWidth = 4; c.strokeStyle = "#fbbf24"; c.stroke(); c.restore();
+            c.textAlign = "center"; c.textBaseline = "middle";
+            c.fillStyle = "#fbbf24"; c.font = `400 ${cardH * 0.15}px 'Anton'`; c.fillText("MATCH SUMMARY", w/2, cardY + cardH * 0.15);
+            c.fillStyle = "white"; c.font = `400 ${cardH * 0.25}px 'Anton'`; c.fillText(match.winner || "MATCH FINISHED", w/2, cardY + cardH * 0.35);
+            c.fillStyle = "#94a3b8"; c.font = `700 ${cardH * 0.1}px 'Apple SD Gothic Neo'`; c.fillText(match.margin || "", w/2, cardY + cardH * 0.5);
+            if (match.pom) {
+                c.beginPath(); c.moveTo(cardX + 50, cardY + cardH * 0.6); c.lineTo(cardX + cardW - 50, cardY + cardH * 0.6);
+                c.strokeStyle = "rgba(255,255,255,0.2)"; c.lineWidth = 2; c.stroke();
+                c.fillStyle = "#fbbf24"; c.font = `700 ${cardH * 0.08}px 'Apple SD Gothic Neo'`; c.fillText("PLAYER OF THE MATCH", w/2, cardY + cardH * 0.7);
+                c.fillStyle = "white"; c.font = `400 ${cardH * 0.15}px 'Anton'`; c.fillText(match.pom.name, w/2, cardY + cardH * 0.82);
+                c.fillStyle = "#cbd5e1"; c.font = `500 ${cardH * 0.08}px 'Apple SD Gothic Neo'`; c.fillText(match.pom.stats, w/2, cardY + cardH * 0.92);
+            }
+        }
+        
+        // --- SOCIAL LIVE HANDLING ---
+        function showFbHelp() { document.getElementById('fb-help-modal').style.display = 'flex'; }
+        function showYtHelp() { document.getElementById('yt-help-modal').style.display = 'flex'; }
+        function closeHelp(type) { document.getElementById(`${type}-help-modal`).style.display = 'none'; }
+        
+        function proceedToFb() {
+            // Standard Tab to fix Safari redirect issues
+            const url = "https://www.facebook.com/live/producer";
+            const win = window.open(url, "_blank");
+            if (win) { win.focus(); closeHelp('fb'); } else { alert("Please allow popups."); }
+        }
 
-    // Layout Dimensions
-    const cardW = w * 0.85; // 85% of screen width
-    const cardH = h * 0.22; // Lower third height
-    const x = (w - cardW) / 2;
-    const y = h - cardH - (h * 0.1); // Positioned near bottom
+        function proceedToStreamYard() {
+            const url = "https://streamyard.com/broadcasts";
+            const win = window.open(url, "_blank");
+            if (win) { win.focus(); closeHelp('yt'); } else { alert("Please allow popups."); }
+        }
 
-    // 1. Main Background (Deep Navy Gradient)
-    c.save();
-    c.shadowColor = "rgba(0,0,0,0.8)"; c.shadowBlur = 30; c.shadowOffsetY = 15;
-    
-    const bgGrad = c.createLinearGradient(x, y, x + cardW, y);
-    bgGrad.addColorStop(0, "#000000");   // Black fade left
-    bgGrad.addColorStop(0.2, "#001233"); // Deep Navy
-    bgGrad.addColorStop(0.8, "#001233"); 
-    bgGrad.addColorStop(1, "#000000");   // Black fade right
-    
-    c.fillStyle = bgGrad;
-    drawRoundRect(c, x, y, cardW, cardH, 20);
-    c.fill();
-    c.shadowColor = "transparent";
-
-    // 2. Team Logo (Large White Circle on Left)
-    const logoSize = cardH * 0.85;
-    const logoX = x + 40;
-    const logoY = y + (cardH - logoSize) / 2;
-
-    // White Border Circle
-    c.fillStyle = "white";
-    c.beginPath(); c.arc(logoX + logoSize/2, logoY + logoSize/2, logoSize/2, 0, Math.PI*2); c.fill();
-    
-    // Grey Inner Circle
-    c.fillStyle = "#e2e8f0";
-    c.beginPath(); c.arc(logoX + logoSize/2, logoY + logoSize/2, logoSize/2 - 4, 0, Math.PI*2); c.fill();
-
-    // The Logo Image
-    drawLogo(c, "TM", team1Logo, logoX + 4, logoY + 4, logoSize - 8, true); // Assuming batting team logo is available via team1Logo global or fetch from state
-
-    // 3. Player Name (Split styling: Thin First Name, Bold Last Name)
-    // We try to split the name. If one word, just show it bold.
-    const nameParts = d.name.split(" ");
-    let firstName = ""; 
-    let lastName = d.name;
-    
-    if(nameParts.length > 1) {
-        lastName = nameParts.pop(); // Last word is last name
-        firstName = nameParts.join(" "); // Rest is first name
-    }
-
-    const textX = logoX + logoSize + 40;
-    const nameY = y + (cardH * 0.45);
-
-    c.textAlign = "left";
-    c.textBaseline = "alphabetic";
-    c.fillStyle = "white";
-    
-    // Draw First Name (Thin/Regular)
-    c.font = `400 ${cardH * 0.35}px 'Roboto'`;
-    c.fillText(firstName.toUpperCase(), textX, nameY);
-    
-    // Measure first name to place Last Name next to it
-    const firstW = c.measureText(firstName.toUpperCase() + " ").width;
-    
-    // Draw Last Name (Bold/Thick)
-    c.font = `900 ${cardH * 0.35}px 'Roboto'`;
-    c.fillText(lastName.toUpperCase(), textX + (firstName ? firstW : 0), nameY);
-
-    // 4. Dismissal Detail (Bottom Line)
-    c.fillStyle = "#94a3b8"; // Silver Grey
-    c.font = `500 ${cardH * 0.15}px 'Roboto'`;
-    c.fillText(d.howOut, textX, y + (cardH * 0.7));
-
-    // 5. Score Box (Right Side)
-    const boxH = cardH * 0.7;
-    const boxW = boxH * 1.8;
-    const boxX = x + cardW - boxW - 30;
-    const boxY = y + (cardH - boxH) / 2;
-
-    c.save();
-    // Glassy Gradient Box
-    const boxGrad = c.createLinearGradient(boxX, boxY, boxX, boxY + boxH);
-    boxGrad.addColorStop(0, "#3b82f6"); // Blue Top
-    boxGrad.addColorStop(1, "#0f172a"); // Dark Bottom
-    c.fillStyle = boxGrad;
-    
-    // Silver Border
-    c.strokeStyle = "#cbd5e1"; 
-    c.lineWidth = 4;
-    
-    drawRoundRect(c, boxX, boxY, boxW, boxH, 15);
-    c.fill();
-    c.stroke();
-
-    // 6. Score Numbers
-    c.fillStyle = "white";
-    c.textAlign = "center";
-    
-    // Big Runs
-    c.font = `900 ${boxH * 0.6}px 'Anton'`;
-    c.fillText(d.score, boxX + boxW/2, boxY + boxH * 0.55);
-    
-    // Balls Label
-    c.font = `500 ${boxH * 0.2}px 'Roboto'`;
-    c.fillText(`OFF ${d.balls}`, boxX + boxW/2, boxY + boxH * 0.85);
-
-    c.restore();
-    c.restore();
-}
+        // --- OPTIMIZED RECORDING ---
+        function toggleRecording() {
+            if(isRecording) { recorder.stop(); isRecording = false; document.getElementById('rec-button').classList.remove('recording'); }
+            else {
+                const stream = canvas.captureStream(60); 
+                if(video.srcObject) { const audioTracks = video.srcObject.getAudioTracks(); if(audioTracks.length > 0) stream.addTrack(audioTracks[0]); }
+                let options = { mimeType: 'video/webm;codecs=h264', videoBitsPerSecond: 12000000 };
+                if(!MediaRecorder.isTypeSupported(options.mimeType)) { options = { mimeType: 'video/webm;codecs=vp9', videoBitsPerSecond: 12000000 }; }
+                if(!MediaRecorder.isTypeSupported(options.mimeType)) { options = { mimeType: 'video/webm', videoBitsPerSecond: 12000000 }; }
+                if(!MediaRecorder.isTypeSupported(options.mimeType)) { options = { mimeType: 'video/mp4', videoBitsPerSecond: 12000000 }; }
+                try { recorder = new MediaRecorder(stream, options); }
+                catch(e) { console.warn("Fallback"); recorder = new MediaRecorder(stream); }
+                chunks = []; recorder.ondataavailable = e => { if(e.data.size) chunks.push(e.data); };
+                recorder.onstop = saveVideo; recorder.start();
+                isRecording = true; document.getElementById('rec-button').classList.add('recording');
+            }
+        }
+        function saveVideo() {
+            const mime = recorder.mimeType; let ext = mime.includes('mp4') ? 'mp4' : 'webm';
+            const blob = new Blob(chunks, { type: mime }); const url = URL.createObjectURL(blob);
+            const a = document.createElement('a'); a.style.display = 'none'; a.href = url; a.download = `ICC_Broadcast_${Date.now()}.${ext}`; 
+            document.body.appendChild(a); a.click(); setTimeout(() => { document.body.removeChild(a); window.URL.revokeObjectURL(url); }, 100);
+        }
     </script>
 </body>
 </html>
