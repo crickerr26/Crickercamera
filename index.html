@@ -78,47 +78,6 @@
             animation: none; 
         }
 
-        /* --- NEW ZOOM CONTROLS --- */
-        #zoom-container {
-            position: absolute;
-            right: 20px;
-            top: 50%;
-            transform: translateY(-50%);
-            height: 200px;
-            width: 50px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            background: rgba(0, 0, 0, 0.3);
-            border-radius: 25px;
-            backdrop-filter: blur(4px);
-            border: 1px solid rgba(255,255,255,0.1);
-            transition: opacity 0.3s;
-            display: none; 
-        }
-
-        /* Custom Range Slider Styling (Vertical) */
-        input[type=range][orient=vertical] {
-            writing-mode: bt-lr; /* IE */
-            -webkit-appearance: slider-vertical; /* WebKit */
-            width: 8px;
-            height: 140px;
-            padding: 0 5px;
-            background: transparent;
-            cursor: pointer;
-        }
-        
-        .zoom-btn {
-            color: white;
-            font-size: 18px;
-            font-weight: bold;
-            cursor: pointer;
-            padding: 10px;
-            opacity: 0.8;
-        }
-        .zoom-btn:active { transform: scale(0.9); opacity: 1; }
-
         /* SETUP SCREEN */
         #setup-screen { position: absolute; inset: 0; z-index: 60; background: radial-gradient(circle at center, #0f172a 0%, #000000 100%); display: flex; flex-direction: column; align-items: center; justify-content: center; }
         .input-field { background: rgba(255,255,255,0.05); border: 2px solid rgba(255,255,255,0.1); color: #fbbf24; font-size: 4rem; text-align: center; font-weight: 700; letter-spacing: 0.5rem; width: 320px; padding: 1rem; border-radius: 1rem; outline: none; transition: all 0.3s; font-family: 'Anton', sans-serif; margin-bottom: 2rem; }
@@ -155,12 +114,6 @@
                 <div id="rec-indicator"></div> 
                 <span id="rec-text">REC</span>
             </div>
-
-            <div id="zoom-container" class="hud-item">
-                <div class="zoom-btn" onclick="stepZoom(1)">+</div>
-                <input type="range" id="zoom-slider" orient="vertical" min="1" max="10" step="0.1" value="1" oninput="applyZoom(this.value)">
-                <div class="zoom-btn" onclick="stepZoom(-1)">-</div>
-            </div>
         </div>
         
         <video id="video-source" autoplay playsinline muted></video>
@@ -196,6 +149,7 @@
         const db = firebase.firestore();
 
         // --- GLOBAL STATE ---
+        // Updated Match Object to include new fields needed for new layout
         let match = { t1: "HOME", t2: "AWAY", score: 0, wickets: 0, overs: 0, balls: 0, striker: { name: "", runs: 0, balls: 0 }, nonStriker: { name: "", runs: 0, balls: 0 }, bowler: { name: "", wkts: 0, runs: 0, balls: 0 }, currentOver: [], target: 0, totalOvers: 20, matchStatus: "", winner: "", margin: "", pom: null, showDismissalCard: false, showSummaryOverlay: false };
         let team1Logo = null, team2Logo = null;
         let lastActionId = null, animType = null, animTime = 0;
@@ -204,10 +158,6 @@
         const canvas = document.getElementById('broadcast-canvas');
         const ctx = canvas.getContext('2d');
         let recorder, chunks = [], isRecording = false;
-
-        // ZOOM VARIABLES
-        let videoTrack = null;
-        let zoomCapabilities = null;
 
         // --- PEER JS (Wireless) ---
         let peer = null;
@@ -238,21 +188,6 @@
             canvas.style.height = window.innerHeight + 'px';
         }
 
-        // --- SMART CAMERA CONNECTION ---
-        // Recursively tries highest quality first, then steps down if it fails
-        async function getSafeStream(attempts) {
-            for (const constraints of attempts) {
-                try {
-                    console.log("Trying constraints:", JSON.stringify(constraints));
-                    const stream = await navigator.mediaDevices.getUserMedia(constraints);
-                    return stream; // Success!
-                } catch (e) {
-                    console.warn("Failed constraints, trying next level...", e);
-                }
-            }
-            throw new Error("Camera could not start. Please ensure permissions are granted.");
-        }
-
         function connectToMatch() {
             const id = document.getElementById('match-id').value;
             if(!id) return alert("Please enter Match ID");
@@ -260,71 +195,17 @@
             // Unlock Audio
             try { ['audio-four','audio-six','audio-wicket'].forEach(id => document.getElementById(id).load()); } catch(e){}
 
-            // QUALITY TIERS
-            const qualityAttempts = [
-                // 1. Ultra HD (4K) - 60fps
-                { video: { facingMode: "environment", width: { ideal: 3840 }, height: { ideal: 2160 }, frameRate: { ideal: 60 } }, audio: true },
-                // 2. Ultra HD (4K) - 30fps
-                { video: { facingMode: "environment", width: { ideal: 3840 }, height: { ideal: 2160 } }, audio: true },
-                // 3. Full HD (1080p) - 60fps
-                { video: { facingMode: "environment", width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 60 } }, audio: true },
-                // 4. Full HD (1080p) - 30fps
-                { video: { facingMode: "environment", width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: true },
-                // 5. Basic (Auto) - Last Resort
-                { video: { facingMode: "environment" }, audio: true }
-            ];
+            const constraints = { video: { facingMode: "environment", width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: true };
             
-            getSafeStream(qualityAttempts).then(stream => {
+            navigator.mediaDevices.getUserMedia(constraints).then(stream => {
                 video.srcObject = stream;
                 video.play();
-                
-                // --- SETUP ZOOM CAPABILITIES (FIXED) ---
-                videoTrack = stream.getVideoTracks()[0];
-                
-                // FIXED: Wrapped in try-catch and checked for capabilities existence to prevent crashes on phones
-                try {
-                    if (videoTrack.getCapabilities) {
-                        const capabilities = videoTrack.getCapabilities();
-                        if ('zoom' in capabilities) {
-                            zoomCapabilities = capabilities.zoom;
-                            const slider = document.getElementById('zoom-slider');
-                            const container = document.getElementById('zoom-container');
-                            
-                            slider.min = zoomCapabilities.min;
-                            slider.max = zoomCapabilities.max;
-                            slider.step = 0.1;
-                            slider.value = zoomCapabilities.min;
-                            
-                            container.style.display = 'flex'; // Show zoom UI
-                        }
-                    }
-                } catch(err) {
-                    console.log("Zoom not supported or error in capabilities:", err);
-                }
-
                 document.getElementById('setup-screen').style.display = 'none';
                 document.getElementById('app-container').style.display = 'block';
                 resizeCanvas();
                 requestAnimationFrame(renderLoop);
                 listenToDB(id);
-            }).catch(e => alert("Camera Error: " + e.message + "\nCheck if website is HTTPS and permissions allowed."));
-        }
-
-        // --- ZOOM LOGIC ---
-        function applyZoom(val) {
-            if (!videoTrack) return;
-            videoTrack.applyConstraints({
-                advanced: [{ zoom: parseFloat(val) }]
-            }).catch(err => console.log("Zoom error:", err));
-        }
-
-        function stepZoom(direction) {
-            const slider = document.getElementById('zoom-slider');
-            let newVal = parseFloat(slider.value) + direction;
-            if(newVal > parseFloat(slider.max)) newVal = parseFloat(slider.max);
-            if(newVal < parseFloat(slider.min)) newVal = parseFloat(slider.min);
-            slider.value = newVal;
-            applyZoom(newVal);
+            }).catch(e => alert("Camera Error: " + e.message));
         }
 
         // --- WIRELESS OBS LOGIC ---
