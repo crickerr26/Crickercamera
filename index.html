@@ -20,7 +20,7 @@
         #receiver-container { display:none; position: absolute; top:0; left:0; width:100%; height:100%; background:black; z-index: 999; }
         
         /* HIDDEN VIDEO SOURCES */
-        #video-source, #replay-source { 
+        #video-source { 
             position: absolute; top: 0; left: 0; 
             width: 100%; height: 100%; 
             object-fit: cover; 
@@ -217,7 +217,6 @@
         </div>
         
         <video id="video-source" autoplay playsinline muted></video>
-        <video id="replay-source" playsinline muted></video> 
         <canvas id="broadcast-canvas"></canvas>
     </div>
 
@@ -259,7 +258,10 @@
         crickerrLogoImg.src = 'crickerrlogo.png';
 
         const video = document.getElementById('video-source');
-        const replayVideo = document.getElementById('replay-source');
+        
+        // REPLAY VIDEO IS DYNAMIC
+        let replayVideo = null; 
+        
         const canvas = document.getElementById('broadcast-canvas');
         const ctx = canvas.getContext('2d');
         let recorder, chunks = [], isRecording = false;
@@ -352,7 +354,7 @@
             }
         }
 
-        // --- ROBUST REPLAY BUFFER ---
+        // --- ROBUST REPLAY BUFFER (Increased to 20 chunks / ~20s) ---
         function startRollingReplayBuffer(stream) {
             let mimeType = 'video/webm;codecs=vp9';
             if (!MediaRecorder.isTypeSupported(mimeType)) mimeType = 'video/mp4'; 
@@ -365,8 +367,8 @@
                 replayRecorder.ondataavailable = (e) => {
                     if (e.data && e.data.size > 0) {
                         replayChunks.push(e.data);
-                        // Increase buffer to ~14-15 seconds (assuming 1s slices)
-                        if(replayChunks.length > 14) {
+                        // Store more chunks for longer replay (approx 20s)
+                        if(replayChunks.length > 20) {
                             replayChunks.shift();
                         }
                     }
@@ -385,42 +387,56 @@
             console.log("Preparing Replay: " + type);
             replayType = type;
             
-            // CLEANUP PREVIOUS REPLAY TO PREVENT BLACK SCREEN
-            if (replayBlobUrl) {
-                URL.revokeObjectURL(replayBlobUrl);
+            // 1. PAUSE MAIN VIDEO TO SAVE RESOURCES
+            video.pause();
+
+            // 2. CLEANUP OLD VIDEO
+            if (replayVideo) {
+                if(replayBlobUrl) URL.revokeObjectURL(replayBlobUrl);
+                replayVideo.remove();
+                replayVideo = null;
             }
-            
+
+            // 3. CREATE NEW VIDEO ELEMENT
+            replayVideo = document.createElement('video');
+            replayVideo.id = "replay-source";
+            replayVideo.muted = true;
+            replayVideo.autoplay = true;
+            replayVideo.playsInline = true;
+            // Hide it visually, we draw to canvas
+            replayVideo.style.cssText = "position:absolute; top:0; left:0; width:100%; height:100%; object-fit:cover; z-index:0; opacity:0;";
+            document.getElementById('app-container').appendChild(replayVideo);
+
+            // 4. LOAD BLOB
             const blob = new Blob(replayChunks, { type: replayChunks[0].type });
             replayBlobUrl = URL.createObjectURL(blob);
             
             replayVideo.src = replayBlobUrl;
-            replayVideo.playbackRate = 0.6; 
+            replayVideo.playbackRate = 0.6; // SLOW MOTION
             
-            // CRITICAL: Force video reload to ensure it plays
             replayVideo.load();
+            replayVideo.play().catch(e => console.log("Replay autoplay blocked", e));
             
-            const playPromise = replayVideo.play();
-            if (playPromise !== undefined) {
-                playPromise.then(_ => {
-                    // Playback started
-                }).catch(error => {
-                    console.warn("Replay Auto-play prevent, forcing mute", error);
-                    replayVideo.muted = true;
-                    replayVideo.play();
-                });
-            }
-            
-            // Start sequence
+            // 5. START ANIMATION
             replayState = "TRANSITION_IN";
             transitionStartTime = Date.now();
         }
 
         function cleanupReplay() {
-            // STOP & RESET VIDEO ELEMENT
-            replayVideo.pause();
-            replayVideo.src = ""; // Clear source
-            replayVideo.load();   // Force reset
+            // KILL REPLAY VIDEO
+            if(replayVideo) {
+                replayVideo.pause();
+                replayVideo.src = "";
+                replayVideo.remove();
+                replayVideo = null;
+            }
+            if(replayBlobUrl) {
+                URL.revokeObjectURL(replayBlobUrl);
+                replayBlobUrl = null;
+            }
             
+            // RESUME MAIN VIDEO
+            video.play().catch(e => console.log("Resume live video failed", e));
             replayState = "LIVE";
         }
 
@@ -535,16 +551,13 @@
                     if (data.lastAction && data.lastAction.id !== lastActionId) { 
                         lastActionId = data.lastAction.id; 
                         
-                        // 1. Play Sound Immediately
+                        // 1. Play Sound
                         triggerAudio(data.lastAction.type);
 
-                        // 2. Trigger Text Animation Immediately
-                        // handled in renderLoop via animType
-
-                        // 3. Trigger Replay AFTER 3.5 Seconds (Sequencing)
+                        // 2. Schedule Replay AFTER 4 Seconds (Wait for text anim)
                         if(['4', '6', 'W'].includes(data.lastAction.type)) {
                             console.log("Scheduling Replay...");
-                            setTimeout(() => triggerReplay(data.lastAction.type), 3500); 
+                            setTimeout(() => triggerReplay(data.lastAction.type), 4000); 
                         }
                     }
                 }
@@ -552,7 +565,7 @@
         }
 
         function triggerAudio(type) {
-            triggerAnim(type); // Set graphic variables
+            triggerAnim(type); 
             const audioId = type === '4' ? 'audio-four' : type === '6' ? 'audio-six' : type === 'W' ? 'audio-wicket' : null;
             if (audioId) {
                 const audio = document.getElementById(audioId);
@@ -580,27 +593,27 @@
                 drawLiveGraphics(w, h);
             
             } else if (replayState === "TRANSITION_IN") {
-                drawVideoObject(video, w, h);
-                // Draw Stinger Animation
-                let finished = drawStinger(w, h, "IN");
+                drawVideoObject(video, w, h); // Draw live under transition
+                let finished = drawCoolStinger(w, h, "IN"); // FIXED STINGER
                 if (finished) {
                     replayState = "PLAYING";
+                    if(replayVideo) replayVideo.play().catch(e => {});
                     replayStartTime = Date.now();
                 }
 
             } else if (replayState === "PLAYING") {
-                drawVideoObject(replayVideo, w, h);
-                drawReplayOverlay(w, h);
+                if(replayVideo) drawVideoObject(replayVideo, w, h);
+                drawReplayOverlay(w, h); // TEXT
                 
-                // End Replay after 12s or video end
-                if (replayVideo.ended || (Date.now() - replayStartTime > 12000)) { 
+                // Play for 15 seconds max
+                if ((replayVideo && replayVideo.ended) || (Date.now() - replayStartTime > 15000)) { 
                     replayState = "TRANSITION_OUT";
                     transitionStartTime = Date.now();
                 }
 
             } else if (replayState === "TRANSITION_OUT") {
-                drawVideoObject(video, w, h);
-                let finished = drawStinger(w, h, "OUT");
+                drawVideoObject(video, w, h); // Draw live under transition
+                let finished = drawCoolStinger(w, h, "OUT");
                 if (finished) {
                     cleanupReplay(); // Reset for next time
                 }
@@ -623,68 +636,79 @@
             }
         }
 
-        // --- SMOOTH STINGER ANIMATION (1.5s) ---
-        function drawStinger(w, h, direction) {
+        // --- COOL STINGER ANIMATION (Fixed Split Screen Bug) ---
+        function drawCoolStinger(w, h, direction) {
             const now = Date.now();
             const elapsed = now - transitionStartTime;
-            const duration = 1500; 
-            let progress = elapsed / duration;
-            if (progress > 1) return true;
+            const duration = 2500; // 2.5s Total
+            let p = elapsed / duration;
+            if (p > 1) return true;
 
-            const ease = progress < 0.5 ? 4 * progress * progress * progress : 1 - Math.pow(-2 * progress + 2, 3) / 2;
+            // EaseInOutCubic
+            const ease = p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2;
             
-            let xPos = (direction === "IN") ? (w * 1.5) - (w * 2.5 * ease) : (w * -1.5) + (w * 2.5 * ease);
-            
+            // IMPORTANT: Use restore() to undo transforms, NOT resetTransform()
             ctx.save();
-            ctx.translate(xPos, 0);
-            const barW = w * 0.4;
-            const skew = -0.3; 
-            ctx.transform(1, 0, skew, 1, 0, 0); 
-
-            // Blue & Gold Bars
-            ctx.fillStyle = "#3b82f6";
-            ctx.fillRect(0, 0, barW, h);
-            ctx.fillStyle = "#fbbf24";
-            ctx.fillRect(barW * 0.3, 0, barW * 0.4, h);
-
-            // Center Logo
-            if (crickerrLogoImg.complete) {
-                const ls = h * 0.4;
-                ctx.drawImage(crickerrLogoImg, (barW/2) - (ls/2), (h/2) - (ls/2), ls, ls);
-            }
-            ctx.restore();
             
-            // Full Screen Cover at Peak
-            if (progress > 0.4 && progress < 0.6) {
-                ctx.fillStyle = "#0f172a";
-                ctx.fillRect(0, 0, w, h);
-                if (crickerrLogoImg.complete) {
-                    const centerS = h * 0.5;
-                    ctx.drawImage(crickerrLogoImg, (w-centerS)/2, (h-centerS)/2, centerS, centerS);
+            // Calculate Cover Alpha (Hold Phase)
+            let coverAlpha = 0;
+            if(p < 0.3) coverAlpha = p / 0.3;        // Fade In
+            else if(p > 0.7) coverAlpha = (1 - p) / 0.3; // Fade Out
+            else coverAlpha = 1;                     // Hold
+
+            if (coverAlpha > 0) {
+                // Background
+                ctx.fillStyle = `rgba(15, 23, 42, ${coverAlpha})`; 
+                ctx.fillRect(0,0,w,h);
+                
+                // Moving Stripes (No Skew to prevent artifacts)
+                const offset = (ease * w * 1.5) - (w * 0.25);
+                
+                ctx.beginPath();
+                ctx.moveTo(offset, 0);
+                ctx.lineTo(offset + (w*0.2), 0);
+                ctx.lineTo(offset + (w*0.1), h);
+                ctx.lineTo(offset - (w*0.1), h);
+                ctx.fillStyle = "rgba(59, 130, 246, 0.6)"; // Blue
+                ctx.fill();
+
+                // Logo Pop in Center
+                if (coverAlpha > 0.8 && crickerrLogoImg.complete) {
+                    const ls = h * 0.4;
+                    const pulse = 1 + Math.sin(p * 10) * 0.05;
+                    const dW = ls * pulse;
+                    const dH = ls * pulse;
+                    
+                    ctx.shadowColor = "white";
+                    ctx.shadowBlur = 20;
+                    ctx.drawImage(crickerrLogoImg, (w-dW)/2, (h-dH)/2, dW, dH);
+                    ctx.shadowBlur = 0;
                 }
             }
+
+            ctx.restore(); // CORRECT RESTORE
             return false;
         }
 
-        // --- REPLAY OVERLAY (Bottom Left) ---
+        // --- REPLAY OVERLAY (Higher Position) ---
         function drawReplayOverlay(w, h) {
             const labelText = (replayType === '6') ? "ACTION REPLAY • SIX RUNS" : (replayType === 'W' ? "ACTION REPLAY • WICKET" : "ACTION REPLAY");
             const color = (replayType === '6') ? "#22c55e" : (replayType === 'W' ? "#ef4444" : "#3b82f6");
 
-            // Calculate Position relative to Bottom Left Scoreboard Area
             const barH = h * 0.095;
             const bottomY = h - barH - (h * 0.03); 
-            const overlayY = bottomY - 60; // Just above scoreboard
+            // Position: Left Side, 160px above Scoreboard
+            const overlayY = bottomY - 160; 
             const marginX = w * 0.03;
             
             ctx.save();
-            ctx.font = "900 24px 'Roboto Condensed'";
+            ctx.font = "900 32px 'Roboto Condensed'"; // Bigger Text
             const textW = ctx.measureText(labelText).width;
             
             // Box
-            ctx.fillStyle = "rgba(0,0,0,0.85)";
-            const boxH = 40;
-            const pad = 15;
+            ctx.fillStyle = "rgba(0,0,0,0.9)";
+            const boxH = 50;
+            const pad = 20;
             
             ctx.beginPath();
             ctx.moveTo(marginX, overlayY);
@@ -695,20 +719,20 @@
 
             // Accent Line
             ctx.fillStyle = color;
-            ctx.fillRect(marginX, overlayY, 5, boxH);
+            ctx.fillRect(marginX, overlayY, 8, boxH);
 
             // Blinking Dot
-            if (Math.floor(Date.now() / 500) % 2 === 0) {
+            if (Math.floor(Date.now() / 400) % 2 === 0) {
                 ctx.fillStyle = "white";
                 ctx.beginPath();
-                ctx.arc(marginX + 20, overlayY + (boxH/2), 6, 0, Math.PI * 2);
+                ctx.arc(marginX + 25, overlayY + (boxH/2), 8, 0, Math.PI * 2);
                 ctx.fill();
             }
 
             // Text
             ctx.fillStyle = "white";
             ctx.textBaseline = "middle";
-            ctx.fillText(labelText, marginX + 35, overlayY + (boxH/2) + 2);
+            ctx.fillText(labelText, marginX + 45, overlayY + (boxH/2) + 2);
             
             ctx.restore();
         }
@@ -819,10 +843,9 @@
             c.clip();
             c.restore();
             
-            // --- ENLARGED CRICKERR LOGO (1.35x Scale) ---
+            // --- ENLARGED CRICKERR LOGO (1.5x Scale) ---
             if (crickerrLogoImg.complete && crickerrLogoImg.naturalHeight !== 0) {
-                // Increased Scale from 1.2 to 1.35
-                const cLogoH = barH * 1.35; 
+                const cLogoH = barH * 1.5; 
                 const aspectRatio = crickerrLogoImg.width / crickerrLogoImg.height;
                 const cLogoW = cLogoH * aspectRatio;
 
