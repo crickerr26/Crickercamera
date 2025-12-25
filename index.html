@@ -95,7 +95,6 @@
             backdrop-filter: blur(4px);
             border: 1px solid rgba(255,255,255,0.1);
             transition: opacity 0.3s;
-            /* Hidden by default until camera loads and confirms zoom support */
             display: none; 
         }
 
@@ -145,7 +144,7 @@
         <h1 style="font-family: 'Anton'; font-size: 3rem; color: white; margin-bottom: 0.5rem; letter-spacing: 2px;">BROADCAST UNIT</h1>
         <p style="color: #94a3b8; font-size: 0.9rem; font-weight: bold; margin-bottom: 1rem; text-transform: uppercase; letter-spacing: 1px; font-family: 'Roboto';">Enter Match Code</p>
         <input type="text" id="match-id" class="input-field" placeholder="0000" maxlength="4" inputmode="numeric">
-        <button onclick="connectToMatch()" class="start-btn">Start 4K Camera</button>
+        <button onclick="connectToMatch()" class="start-btn">Start Camera</button>
     </div>
 
     <div id="app-container" style="display: none;">
@@ -239,6 +238,21 @@
             canvas.style.height = window.innerHeight + 'px';
         }
 
+        // --- SMART CAMERA CONNECTION ---
+        // Recursively tries highest quality first, then steps down if it fails
+        async function getSafeStream(attempts) {
+            for (const constraints of attempts) {
+                try {
+                    console.log("Trying constraints:", JSON.stringify(constraints));
+                    const stream = await navigator.mediaDevices.getUserMedia(constraints);
+                    return stream; // Success!
+                } catch (e) {
+                    console.warn("Failed constraints, trying next level...", e);
+                }
+            }
+            throw new Error("Camera could not start. Please ensure permissions are granted.");
+        }
+
         function connectToMatch() {
             const id = document.getElementById('match-id').value;
             if(!id) return alert("Please enter Match ID");
@@ -246,18 +260,21 @@
             // Unlock Audio
             try { ['audio-four','audio-six','audio-wicket'].forEach(id => document.getElementById(id).load()); } catch(e){}
 
-            // UPDATED: Request Maximum Quality (4K)
-            const constraints = { 
-                video: { 
-                    facingMode: "environment", 
-                    width: { ideal: 4096 },  // Ask for 4K
-                    height: { ideal: 2160 }, 
-                    frameRate: { ideal: 60 } // Ask for 60fps
-                }, 
-                audio: true 
-            };
+            // QUALITY TIERS
+            const qualityAttempts = [
+                // 1. Ultra HD (4K) - 60fps
+                { video: { facingMode: "environment", width: { ideal: 3840 }, height: { ideal: 2160 }, frameRate: { ideal: 60 } }, audio: true },
+                // 2. Ultra HD (4K) - 30fps
+                { video: { facingMode: "environment", width: { ideal: 3840 }, height: { ideal: 2160 } }, audio: true },
+                // 3. Full HD (1080p) - 60fps
+                { video: { facingMode: "environment", width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 60 } }, audio: true },
+                // 4. Full HD (1080p) - 30fps
+                { video: { facingMode: "environment", width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: true },
+                // 5. Basic (Auto) - Last Resort
+                { video: { facingMode: "environment" }, audio: true }
+            ];
             
-            navigator.mediaDevices.getUserMedia(constraints).then(stream => {
+            getSafeStream(qualityAttempts).then(stream => {
                 video.srcObject = stream;
                 video.play();
                 
@@ -265,20 +282,18 @@
                 videoTrack = stream.getVideoTracks()[0];
                 const capabilities = videoTrack.getCapabilities();
                 
-                // If zoom is supported by the device
+                // Check for zoom support
                 if ('zoom' in capabilities) {
                     zoomCapabilities = capabilities.zoom;
                     const slider = document.getElementById('zoom-slider');
                     const container = document.getElementById('zoom-container');
                     
-                    // Set slider Min/Max based on phone hardware
                     slider.min = zoomCapabilities.min;
                     slider.max = zoomCapabilities.max;
-                    slider.step = 0.1; // Smooth steps
+                    slider.step = 0.1;
                     slider.value = zoomCapabilities.min;
                     
-                    // Show the zoom controls
-                    container.style.display = 'flex';
+                    container.style.display = 'flex'; // Show zoom UI
                 }
 
                 document.getElementById('setup-screen').style.display = 'none';
@@ -286,13 +301,12 @@
                 resizeCanvas();
                 requestAnimationFrame(renderLoop);
                 listenToDB(id);
-            }).catch(e => alert("Camera Error: " + e.message));
+            }).catch(e => alert("Camera Error: " + e.message + "\nCheck if website is HTTPS and permissions allowed."));
         }
 
-        // --- NEW SMOOTH ZOOM FUNCTION ---
+        // --- ZOOM LOGIC ---
         function applyZoom(val) {
             if (!videoTrack) return;
-            // Apply constraints creates the physical lens switch effect
             videoTrack.applyConstraints({
                 advanced: [{ zoom: parseFloat(val) }]
             }).catch(err => console.log("Zoom error:", err));
@@ -301,11 +315,8 @@
         function stepZoom(direction) {
             const slider = document.getElementById('zoom-slider');
             let newVal = parseFloat(slider.value) + direction;
-            
-            // Clamp value within bounds
             if(newVal > parseFloat(slider.max)) newVal = parseFloat(slider.max);
             if(newVal < parseFloat(slider.min)) newVal = parseFloat(slider.min);
-            
             slider.value = newVal;
             applyZoom(newVal);
         }
