@@ -58,6 +58,46 @@
         }
         #gear-button:hover { background: rgba(0,0,0,0.8); transform: rotate(90deg); }
 
+        /* SETTINGS MENU */
+        #settings-menu {
+            display: none; position: absolute; top: 80px; left: 25px;
+            background: rgba(15, 23, 42, 0.95); border: 1px solid #333;
+            border-radius: 8px; z-index: 102; flex-direction: column;
+            backdrop-filter: blur(10px); min-width: 160px;
+        }
+        .s-option {
+            padding: 15px 20px; color: #ccc; cursor: pointer;
+            font-family: 'Roboto'; font-size: 14px; border-bottom: 1px solid rgba(255,255,255,0.1);
+            font-weight: bold;
+        }
+        .s-option:last-child { border-bottom: none; }
+        .s-option:hover { background: rgba(255,255,255,0.1); color: white; }
+
+        /* QUALITY INDICATOR & MENU */
+        #quality-badge {
+            position: absolute; top: 25px; left: 85px;
+            color: #888; /* Grey Letters */
+            font-weight: bold; font-family: 'Roboto Condensed'; font-size: 16px;
+            cursor: pointer; z-index: 100;
+            padding: 12px; background: rgba(0,0,0,0.4); border-radius: 8px;
+            backdrop-filter: blur(4px); border: 1px solid rgba(255,255,255,0.1);
+            transition: color 0.3s;
+        }
+        #quality-badge:hover { color: white; }
+
+        #quality-menu {
+            display: none; position: absolute; top: 80px; left: 85px;
+            background: rgba(15, 23, 42, 0.95); border: 1px solid #333;
+            border-radius: 8px; z-index: 101; flex-direction: column;
+            backdrop-filter: blur(10px); min-width: 120px;
+        }
+        .q-option {
+            padding: 12px 20px; color: #ccc; cursor: pointer;
+            font-family: 'Roboto'; font-size: 14px; border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        .q-option:last-child { border-bottom: none; }
+        .q-option:hover { background: rgba(255,255,255,0.1); color: white; }
+
         /* REC BUTTON */
         #rec-button {
             position: absolute; top: 25px; right: 25px;
@@ -149,8 +189,21 @@
 
     <div id="app-container" style="display: none;">
         <div id="controls-layer">
-            <div id="gear-button" class="hud-item" onclick="showObsModal()">⚙️</div>
             
+            <div id="gear-button" class="hud-item" onclick="toggleSettingsMenu()">⚙️</div>
+            
+            <div id="settings-menu" class="hud-item">
+                <div class="s-option" onclick="showObsModal(); toggleSettingsMenu()">Wireless OBS Link</div>
+                <div class="s-option" onclick="changeMatchId()">New Match</div>
+            </div>
+
+            <div id="quality-badge" class="hud-item" onclick="toggleQualityMenu()">1080p</div>
+            <div id="quality-menu" class="hud-item">
+                <div class="q-option" onclick="selectQuality(2160)">4K (UHD)</div>
+                <div class="q-option" onclick="selectQuality(1080)">1080p (FHD)</div>
+                <div class="q-option" onclick="selectQuality(720)">720p (HD)</div>
+            </div>
+
             <div id="rec-button" class="hud-item" onclick="toggleRecording()">
                 <div id="rec-indicator"></div> 
                 <span id="rec-text">REC</span>
@@ -161,7 +214,8 @@
                 <input type="range" id="zoom-slider" orient="vertical" min="1" max="10" step="0.1" value="1" oninput="applyZoom(this.value)">
                 <div class="zoom-btn" onclick="stepZoom(-1)">-</div>
             </div>
-        </div>
+
+            </div>
         
         <video id="video-source" autoplay playsinline muted></video>
         <canvas id="broadcast-canvas"></canvas>
@@ -200,12 +254,17 @@
         let team1Logo = null, team2Logo = null;
         let lastActionId = null, animType = null, animTime = 0;
         
+        // PRELOAD CRICKERR LOGO
+        let crickerrLogoImg = new Image();
+        crickerrLogoImg.src = 'crickerrlogo.png';
+
         const video = document.getElementById('video-source');
         const canvas = document.getElementById('broadcast-canvas');
         const ctx = canvas.getContext('2d');
         let recorder, chunks = [], isRecording = false;
 
         // ZOOM VARIABLES
+        let currentStream = null; 
         let videoTrack = null;
         let zoomCapabilities = null;
 
@@ -239,83 +298,109 @@
         }
 
         // --- SMART CAMERA CONNECTION ---
-        // Recursively tries highest quality first, then steps down if it fails
-        async function getSafeStream(attempts) {
-            for (const constraints of attempts) {
-                try {
-                    console.log("Trying constraints:", JSON.stringify(constraints));
-                    const stream = await navigator.mediaDevices.getUserMedia(constraints);
-                    return stream; // Success!
-                } catch (e) {
-                    console.warn("Failed constraints, trying next level...", e);
-                }
-            }
-            throw new Error("Camera could not start. Please ensure permissions are granted.");
-        }
-
         function connectToMatch() {
             const id = document.getElementById('match-id').value;
             if(!id) return alert("Please enter Match ID");
             
-            // Unlock Audio
             try { ['audio-four','audio-six','audio-wicket'].forEach(id => document.getElementById(id).load()); } catch(e){}
 
-            // QUALITY TIERS
-            const qualityAttempts = [
-                // 1. Ultra HD (4K) - 60fps
-                { video: { facingMode: "environment", width: { ideal: 3840 }, height: { ideal: 2160 }, frameRate: { ideal: 60 } }, audio: true },
-                // 2. Ultra HD (4K) - 30fps
-                { video: { facingMode: "environment", width: { ideal: 3840 }, height: { ideal: 2160 } }, audio: true },
-                // 3. Full HD (1080p) - 60fps
-                { video: { facingMode: "environment", width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 60 } }, audio: true },
-                // 4. Full HD (1080p) - 30fps
-                { video: { facingMode: "environment", width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: true },
-                // 5. Basic (Auto) - Last Resort
-                { video: { facingMode: "environment" }, audio: true }
-            ];
+            // Start with 1080p by default
+            startCameraStream(1920, 1080);
             
-            getSafeStream(qualityAttempts).then(stream => {
-                video.srcObject = stream;
-                video.play();
-                
-                // --- SETUP ZOOM CAPABILITIES (FIXED) ---
-                videoTrack = stream.getVideoTracks()[0];
-                
-                // FIXED: Wrapped in try-catch and checked for capabilities existence to prevent crashes on phones
-                try {
-                    if (videoTrack.getCapabilities) {
-                        const capabilities = videoTrack.getCapabilities();
-                        if ('zoom' in capabilities) {
-                            zoomCapabilities = capabilities.zoom;
-                            const slider = document.getElementById('zoom-slider');
-                            const container = document.getElementById('zoom-container');
-                            
-                            slider.min = zoomCapabilities.min;
-                            slider.max = zoomCapabilities.max;
-                            slider.step = 0.1;
-                            slider.value = zoomCapabilities.min;
-                            
-                            container.style.display = 'flex'; // Show zoom UI
-                        }
-                    }
-                } catch(err) {
-                    console.log("Zoom not supported or error in capabilities:", err);
-                }
+            document.getElementById('setup-screen').style.display = 'none';
+            document.getElementById('app-container').style.display = 'block';
+            resizeCanvas();
+            requestAnimationFrame(renderLoop);
+            listenToDB(id);
+        }
 
-                document.getElementById('setup-screen').style.display = 'none';
-                document.getElementById('app-container').style.display = 'block';
-                resizeCanvas();
-                requestAnimationFrame(renderLoop);
-                listenToDB(id);
-            }).catch(e => alert("Camera Error: " + e.message + "\nCheck if website is HTTPS and permissions allowed."));
+        // --- QUALITY CONTROL LOGIC ---
+        async function startCameraStream(width, height) {
+            // Stop existing stream if any
+            if(currentStream) {
+                currentStream.getTracks().forEach(track => track.stop());
+            }
+
+            const constraints = {
+                video: { 
+                    facingMode: "environment", 
+                    width: { ideal: width }, 
+                    height: { ideal: height },
+                    frameRate: { ideal: 60 } // Try 60fps
+                }, 
+                audio: true 
+            };
+
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia(constraints);
+                currentStream = stream;
+                video.srcObject = stream;
+                video.muted = true;
+                video.play().catch(e => console.error(e));
+
+                // Update Quality Badge Text
+                const actualH = stream.getVideoTracks()[0].getSettings().height;
+                const label = actualH > 1080 ? "4K" : (actualH > 720 ? "1080p" : "720p");
+                document.getElementById('quality-badge').innerText = label;
+
+                // Setup Zoom again for new stream
+                videoTrack = stream.getVideoTracks()[0];
+                setupZoom();
+
+            } catch(e) {
+                console.error("Camera failed:", e);
+                alert("Camera failed to start: " + e.message);
+            }
+        }
+
+        // --- MENUS & NEW MATCH LOGIC ---
+        function toggleQualityMenu() {
+            document.getElementById('settings-menu').style.display = 'none'; // Close other menu
+            const menu = document.getElementById('quality-menu');
+            menu.style.display = menu.style.display === 'flex' ? 'none' : 'flex';
+        }
+
+        function toggleSettingsMenu() {
+            document.getElementById('quality-menu').style.display = 'none'; // Close other menu
+            const menu = document.getElementById('settings-menu');
+            menu.style.display = menu.style.display === 'flex' ? 'none' : 'flex';
+        }
+
+        function changeMatchId() {
+            const newId = prompt("Enter New Match ID:");
+            if(newId && newId.trim() !== "") {
+                window.location.search = `?id=${newId.trim()}`; // Reloads page with new ID
+            }
+        }
+
+        function selectQuality(height) {
+            document.getElementById('quality-menu').style.display = 'none';
+            let w = (height * 16) / 9;
+            startCameraStream(w, height);
+        }
+
+        function setupZoom() {
+            try {
+                if (videoTrack.getCapabilities) {
+                    const capabilities = videoTrack.getCapabilities();
+                    if ('zoom' in capabilities) {
+                        zoomCapabilities = capabilities.zoom;
+                        const slider = document.getElementById('zoom-slider');
+                        const container = document.getElementById('zoom-container');
+                        slider.min = zoomCapabilities.min;
+                        slider.max = zoomCapabilities.max;
+                        slider.step = 0.1;
+                        slider.value = zoomCapabilities.min;
+                        container.style.display = 'flex';
+                    }
+                }
+            } catch(err) { console.log("Zoom setup error", err); }
         }
 
         // --- ZOOM LOGIC ---
         function applyZoom(val) {
             if (!videoTrack) return;
-            videoTrack.applyConstraints({
-                advanced: [{ zoom: parseFloat(val) }]
-            }).catch(err => console.log("Zoom error:", err));
+            videoTrack.applyConstraints({ advanced: [{ zoom: parseFloat(val) }] }).catch(err => console.log("Zoom error:", err));
         }
 
         function stepZoom(direction) {
@@ -328,40 +413,26 @@
         }
 
         // --- WIRELESS OBS LOGIC ---
-
-        // 1. SENDER (Camera)
         function showObsModal() { document.getElementById('obs-modal').style.display = 'flex'; }
         function closeObsModal() { document.getElementById('obs-modal').style.display = 'none'; }
 
         function startWirelessStream() {
-            if(peer) return; // Already running
-            
-            // Create random 4-digit code
+            if(peer) return; 
             const code = Math.floor(1000 + Math.random() * 9000);
             myPeerId = "match-cam-" + code;
-            
             peer = new Peer(myPeerId);
-            
             peer.on('open', (id) => {
                 const baseUrl = window.location.href.split('?')[0];
                 const fullUrl = `${baseUrl}?obs=${myPeerId}`;
-                
                 document.getElementById('btn-start-stream').style.display = 'none';
                 document.getElementById('obs-instructions').style.display = 'block';
                 document.getElementById('obs-url-display').innerText = fullUrl;
-                
-                // Prepare Stream
                 const stream = canvas.captureStream(60);
                 if(video.srcObject) {
                     const audioTracks = video.srcObject.getAudioTracks();
                     if(audioTracks.length > 0) stream.addTrack(audioTracks[0]);
                 }
-
-                // Answer Calls
-                peer.on('call', (call) => {
-                    console.log("OBS Connected!");
-                    call.answer(stream);
-                });
+                peer.on('call', (call) => { console.log("OBS Connected!"); call.answer(stream); });
             });
         }
 
@@ -370,31 +441,21 @@
             navigator.clipboard.writeText(txt).then(() => alert("URL Copied!"));
         }
 
-        // 2. RECEIVER (OBS)
         function initReceiverMode(targetId) {
-            console.log("Starting Receiver Mode for: " + targetId);
             document.getElementById('setup-screen').style.display = 'none';
             document.getElementById('app-container').style.display = 'none';
             document.getElementById('receiver-container').style.display = 'block';
-            
-            const peer = new Peer(); // Auto-gen ID for receiver
+            const peer = new Peer(); 
             peer.on('open', (id) => {
-                console.log("Receiver Peer ID: " + id);
                 const conn = peer.connect(targetId);
-                
-                // Call the camera
                 const call = peer.call(targetId, new MediaStream());
-                
                 call.on('stream', (remoteStream) => {
                     const vid = document.getElementById('remote-video');
                     vid.srcObject = remoteStream;
                     vid.play();
                 });
-                
-                call.on('error', (err) => console.error("Call Error", err));
             });
         }
-
 
         // --- DATABASE LISTENER ---
         function listenToDB(id) {
@@ -429,8 +490,7 @@
             
             ctx.clearRect(0, 0, w, h);
             
-            // 1. Draw Video Layer (Specific to Broadcast App)
-            if (video.readyState === video.HAVE_ENOUGH_DATA) {
+            if (video.readyState >= 2) {
                 const vidRatio = video.videoWidth / video.videoHeight;
                 const screenRatio = w / h;
                 let drawW, drawH, drawX, drawY;
@@ -442,7 +502,6 @@
                 ctx.drawImage(video, drawX, drawY, drawW, drawH);
             }
 
-            // 2. Draw Graphics Layer (Using NEW Layout Functions)
             if (match.showDismissalCard === true && match.dismissalData) {
                 drawDismissalCard(ctx, w, h);
             } 
@@ -450,15 +509,14 @@
                 drawProfessionalSummary(ctx, w, h);
             } 
             else {
-                drawNewLayout(ctx, w, h); // UPDATED CALL
+                drawNewLayout(ctx, w, h);
                 drawPopups(ctx, w, h);
             }
             
             requestAnimationFrame(renderLoop);
         }
 
-        // --- NEW GRAPHICS FUNCTIONS (From OBS Layout) ---
-        
+        // --- GRAPHICS FUNCTIONS ---
         function formatTeamName(name) { 
             if (!name) return "TEAM"; 
             let formatted = name.toUpperCase(); 
@@ -530,21 +588,20 @@
 
         // --- MAIN RENDERER (New Layout) ---
         function drawNewLayout(c, w, h) {
-            // SLIMMER LAYOUT
             const barH = h * 0.095; 
             const marginX = w * 0.03; 
             const bottomY = h - barH - (h * 0.03); 
             const pillW = w - (marginX * 2); 
             const pillX = marginX;
-            
             const isChasing = (match.target && match.target > 0);
-
-            // 1. Gold Top Line (SLIMMER)
+            
+            // 1. Draw Gold Line
             c.fillStyle = "#fbbf24";
             const goldH = barH * 0.04; 
-            c.fillRect(pillX, bottomY - goldH - 2, pillW, goldH);
+            const goldY = bottomY - goldH - 2;
+            c.fillRect(pillX, goldY, pillW, goldH);
 
-            // 2. Main Navy Background
+            // 2. Draw Main Navy Background
             c.save(); 
             c.fillStyle = "#05081c"; 
             c.shadowColor = "rgba(0,0,0,0.5)"; c.shadowBlur = 10; 
@@ -552,177 +609,125 @@
             c.fill();
             c.clip();
             c.restore();
+            
+            // --- DRAW CRICKERR LOGO (PROFESSIONAL PLACEMENT) ---
+            if (crickerrLogoImg.complete && crickerrLogoImg.naturalHeight !== 0) {
+                const cLogoH = barH * 0.55; // Height relative to scoreboard bar
+                const aspectRatio = crickerrLogoImg.width / crickerrLogoImg.height;
+                const cLogoW = cLogoH * aspectRatio;
 
-            // --- GRID CALCULATIONS ---
+                // Position: Right aligned with scoreboard, sitting directly ABOVE gold line
+                const cLogoX = (pillX + pillW) - cLogoW; // Right align with pill end
+                const cLogoY = goldY - cLogoH - (h * 0.005); // Sit above gold line with tiny padding
+
+                c.save();
+                // Add subtle shadow for pop
+                c.shadowColor = "rgba(0,0,0,0.5)";
+                c.shadowBlur = 6;
+                c.shadowOffsetY = 2;
+                c.drawImage(crickerrLogoImg, cLogoX, cLogoY, cLogoW, cLogoH);
+                c.restore();
+            }
+
+            // --- REST OF SCOREBOARD DRAWING ---
             let x1 = pillX;
             let x2 = pillX + (pillW * 0.19);
             let x3 = pillX + (pillW * 0.30);
             let x4 = pillX + (pillW * 0.58);
             let x5 = pillX + (pillW * 0.81);
-            
-            // Variables for 2nd Innings Target Mode
             let xToWinStart = 0;
             let xToWinEnd = 0;
             let bowlStart = x4;
             let bowlEnd = x5;
-
             if (isChasing) {
                 x2 = pillX + (pillW * 0.19);
                 x3 = pillX + (pillW * 0.30);
                 x4 = pillX + (pillW * 0.53); 
-                
                 xToWinStart = x4;
                 xToWinEnd = pillX + (pillW * 0.63); 
-                
                 bowlStart = xToWinEnd;
                 bowlEnd = pillX + (pillW * 0.81); 
                 x5 = bowlEnd;
             }
-
-            // --- DRAW DIVIDERS (BRIGHTER WHITE) ---
             const drawDiv = (x) => {
                 c.beginPath(); c.moveTo(x, bottomY + 5); c.lineTo(x, bottomY + barH - 5);
                 c.strokeStyle = "rgba(255,255,255,0.8)"; c.lineWidth = 1.5; c.stroke();
             };
             drawDiv(x2); drawDiv(x3); drawDiv(x4); 
-            
-            if(isChasing) { 
-                drawDiv(xToWinEnd); 
-                drawDiv(bowlEnd);
-            } else { 
-                drawDiv(x5); 
-            }
-
+            if(isChasing) { drawDiv(xToWinEnd); drawDiv(bowlEnd); } else { drawDiv(x5); }
             const xEnd = pillX + pillW;
-
-            // --- SECTION 1: BATTING TEAM ---
             const logoS = barH * 0.7;
             drawLogo(c, match.t1, team1Logo, x1 + 15, bottomY + (barH - logoS)/2, logoS, true);
-            
             c.fillStyle = "white"; c.textAlign = "left";
             fitText(c, formatTeamName(match.t1), x1 + 25 + logoS, bottomY + barH * 0.45, (x2 - x1) - logoS - 35, barH * 0.35, '700', 'Roboto Condensed');
-            
             if (isChasing) {
-                c.fillStyle = "#fbbf24"; 
-                c.font = `900 ${barH * 0.25}px 'Roboto Condensed'`; 
+                c.fillStyle = "#fbbf24"; c.font = `900 ${barH * 0.25}px 'Roboto Condensed'`; 
                 c.fillText(`TARGET ${match.target}`, x1 + 25 + logoS, bottomY + barH * 0.75);
             } else {
                 c.fillStyle = "#64748b"; c.font = `700 ${barH * 0.16}px 'Roboto'`;
                 c.fillText("BATTING", x1 + 25 + logoS, bottomY + barH * 0.70);
             }
-
-            // --- SECTION 2: SCORE ---
             const scoreCenter = x2 + (x3 - x2)/2;
             c.textAlign = "center";
             c.fillStyle = "#fbbf24"; c.font = `900 ${barH * 0.55}px 'Anton'`;
             c.fillText(`${match.score}/${match.wickets}`, scoreCenter, bottomY + barH * 0.60);
-            
-            c.fillStyle = "white"; 
-            c.font = `700 ${barH * 0.18}px 'Apple SD Gothic Neo', 'Roboto'`; 
+            c.fillStyle = "white"; c.font = `700 ${barH * 0.18}px 'Apple SD Gothic Neo', 'Roboto'`; 
             c.fillText(`OVERS ${match.overs}.${match.balls}`, scoreCenter, bottomY + barH * 0.85);
-
-
-            // --- SECTION 3: BATTERS ---
             c.beginPath(); c.moveTo(x3 + 10, bottomY + barH/2); c.lineTo(x4 - 10, bottomY + barH/2);
             c.strokeStyle = "rgba(255,255,255,0.4)"; c.lineWidth = 1; c.stroke(); 
-
             const batPad = 20;
-            // STRIKER
             c.beginPath(); c.moveTo(x3 + 15, bottomY + barH * 0.25); c.lineTo(x3 + 22, bottomY + barH * 0.30); c.lineTo(x3 + 15, bottomY + barH * 0.35); c.fillStyle = "#fbbf24"; c.fill();
-            
-            c.textAlign = "left"; c.fillStyle = "white"; 
-            c.font = `500 ${barH * 0.28}px 'Apple SD Gothic Neo', 'Roboto Condensed'`; 
+            c.textAlign = "left"; c.fillStyle = "white"; c.font = `500 ${barH * 0.28}px 'Apple SD Gothic Neo', 'Roboto Condensed'`; 
             c.fillText(match.striker.name ? formatPlayerName(match.striker.name) : "STRIKER", x3 + 30, bottomY + barH * 0.38);
-            
             c.textAlign = "right"; c.font = `900 ${barH * 0.35}px 'Roboto Condensed'`;
             c.fillText(match.striker.runs||0, x4 - batPad - 40, bottomY + barH * 0.40);
             c.font = `400 ${barH * 0.2}px 'Roboto'`; c.fillText(`(${match.striker.balls||0})`, x4 - batPad, bottomY + barH * 0.38);
-
-            // NON-STRIKER
-            c.textAlign = "left"; c.fillStyle = "white"; 
-            c.font = `500 ${barH * 0.28}px 'Apple SD Gothic Neo', 'Roboto Condensed'`;
+            c.textAlign = "left"; c.fillStyle = "white"; c.font = `500 ${barH * 0.28}px 'Apple SD Gothic Neo', 'Roboto Condensed'`;
             c.fillText(match.nonStriker.name ? formatPlayerName(match.nonStriker.name) : "NON-STRIKER", x3 + 30, bottomY + barH * 0.88);
-            
             c.textAlign = "right"; c.font = `900 ${barH * 0.35}px 'Roboto Condensed'`;
             c.fillText(match.nonStriker.runs||0, x4 - batPad - 40, bottomY + barH * 0.90);
             c.font = `400 ${barH * 0.2}px 'Roboto'`; c.fillText(`(${match.nonStriker.balls||0})`, x4 - batPad, bottomY + barH * 0.88);
-
-
-            // --- SECTION 4: "TO WIN" BOX (DARKER GRADIENT) ---
             if (isChasing) {
                 const boxW = xToWinEnd - xToWinStart;
                 const runsNeeded = Math.max(0, match.target - match.score);
                 const totalBalls = match.totalOvers * 6;
                 const ballsBowled = (match.overs * 6) + match.balls;
                 const ballsRem = Math.max(0, totalBalls - ballsBowled);
-                
                 const crr = ballsBowled > 0 ? (match.score / (ballsBowled/6)).toFixed(1) : "0.0";
                 const rrr = ballsRem > 0 ? (runsNeeded / (ballsRem/6)).toFixed(1) : "-";
-
                 c.save();
-                
-                // DARKER horizontal gradient
                 const winGrad = c.createLinearGradient(xToWinStart, bottomY, xToWinEnd, bottomY);
-                winGrad.addColorStop(0, "#1565c0"); // Deep Blue
-                winGrad.addColorStop(1, "#0d47a1"); // Darker Navy Blue
-                
-                c.fillStyle = winGrad; 
-                c.fillRect(xToWinStart, bottomY, boxW, barH);
-
+                winGrad.addColorStop(0, "#1565c0"); winGrad.addColorStop(1, "#0d47a1");
+                c.fillStyle = winGrad; c.fillRect(xToWinStart, bottomY, boxW, barH);
                 const boxCenter = xToWinStart + boxW/2;
-
                 c.textAlign = "center";
-                // TO WIN LABEL
-                c.fillStyle = "#dbeafe"; 
-                c.font = `700 ${barH * 0.16}px 'Roboto Condensed'`;
+                c.fillStyle = "#dbeafe"; c.font = `700 ${barH * 0.16}px 'Roboto Condensed'`;
                 c.fillText("TO WIN", boxCenter, bottomY + barH * 0.20);
-                
-                // ENLARGED TARGET SCORE
-                c.fillStyle = "white"; 
-                c.font = `900 ${barH * 0.52}px 'Anton'`; 
+                c.fillStyle = "white"; c.font = `900 ${barH * 0.52}px 'Anton'`; 
                 c.fillText(`${runsNeeded} - ${ballsRem}`, boxCenter, bottomY + barH * 0.71); 
-                
-                // ENLARGED RR/CRR
-                c.fillStyle = "white"; 
-                c.font = `700 ${barH * 0.19}px 'Roboto Condensed'`; 
+                c.fillStyle = "white"; c.font = `700 ${barH * 0.19}px 'Roboto Condensed'`; 
                 c.fillText(`RR: ${rrr}   CRR: ${crr}`, boxCenter, bottomY + barH * 0.92); 
                 c.restore();
             }
-
-            // --- SECTION 5: BOWLER & BALLS ---
             c.beginPath(); c.moveTo(bowlStart + 10, bottomY + barH/2); c.lineTo(bowlEnd - 10, bottomY + barH/2);
             c.strokeStyle = "rgba(255,255,255,0.4)"; c.lineWidth = 1; c.stroke();
-
             const bowlPad = 20;
             const bName = match.bowler.name ? formatPlayerName(match.bowler.name) : "BOWLER";
             const bFigs = `${match.bowler.wkts || 0}-${match.bowler.runs || 0} (${match.bowler.balls ? (Math.floor(match.bowler.balls/6) + '.' + (match.bowler.balls%6)) : "0.0"})`;
-
             c.textAlign = "right"; c.fillStyle = "white"; c.font = `700 ${barH * 0.30}px 'Roboto Condensed'`;
             c.fillText(bName, bowlEnd - bowlPad, bottomY + barH * 0.38);
             c.textAlign = "left"; c.fillStyle = "#cbd5e1"; c.font = `400 ${barH * 0.22}px 'Roboto'`;
             c.fillText(bFigs, bowlStart + bowlPad, bottomY + barH * 0.38);
-
             const balls = match.currentOver || [];
             const ballGap = 5;
             let ballSize = barH * 0.32;
             const maxBallSectionW = (ballSize + ballGap) * 6;
-            
-            if (balls.length > 6) {
-                ballSize = (maxBallSectionW - (ballGap * (balls.length - 1))) / balls.length;
-            }
-
+            if (balls.length > 6) { ballSize = (maxBallSectionW - (ballGap * (balls.length - 1))) / balls.length; }
             const ballY = bottomY + barH * 0.58;
             let ballX = bowlEnd - bowlPad - ballSize;
             const ballsToDraw = [...balls].reverse(); 
-
-            ballsToDraw.forEach(b => {
-                drawBallSquare(c, b, ballX, ballY, ballSize);
-                ballX -= (ballSize + ballGap); 
-            });
-
-            // --- SECTION 6: BOWLING TEAM ---
+            ballsToDraw.forEach(b => { drawBallSquare(c, b, ballX, ballY, ballSize); ballX -= (ballSize + ballGap); });
             const finalDiv = isChasing ? bowlEnd : x5; 
-            
             drawLogo(c, match.t2, team2Logo, xEnd - 15 - logoS, bottomY + (barH - logoS)/2, logoS, false);
             c.fillStyle = "white"; c.textAlign = "right";
             fitText(c, formatTeamName(match.t2), xEnd - 25 - logoS, bottomY + barH * 0.45, (xEnd - finalDiv) - logoS - 35, barH * 0.35, '700', 'Roboto Condensed');
@@ -734,24 +739,20 @@
         function drawProfessionalSummary(c, w, h) {
             const cardW = w * 0.82; const cardH = h * 0.72; const x = (w - cardW) / 2; const y = (h - cardH) / 2 + (h * 0.05);
             const headerH = cardH * 0.18; const footerH = cardH * 0.13; const time = Date.now() * 0.0015;
-
             c.save(); c.shadowColor = "rgba(0,0,0,0.8)"; c.shadowBlur = 60; c.shadowOffsetY = 20;
             const bgGrad = c.createLinearGradient(x, y, x, y + cardH); bgGrad.addColorStop(0, "#020617"); bgGrad.addColorStop(1, "#1e1b4b");   
             c.fillStyle = bgGrad; drawRoundRect(c, x, y, cardW, cardH, 20); c.fill();
             const borderGrad = c.createLinearGradient(x, y, x + cardW, y + cardH); borderGrad.addColorStop(0, `hsl(${(time * 30) % 360}, 70%, 50%)`); borderGrad.addColorStop(0.5, "#22d3ee"); borderGrad.addColorStop(1, `hsl(${(time * 30 + 180) % 360}, 70%, 50%)`);
             c.lineWidth = 4; c.strokeStyle = borderGrad; c.stroke(); c.shadowColor = "transparent";
-
             const logoSize = headerH * 0.9; const logoX = x + 30; const logoY = y + (headerH - logoSize) / 2; 
             c.save(); c.beginPath(); c.moveTo(x + 20, y); c.lineTo(x + cardW - 20, y); c.quadraticCurveTo(x + cardW, y, x + cardW, y + 20); c.lineTo(x + cardW, y + headerH); c.lineTo(x, y + headerH); c.lineTo(x, y + 20); c.quadraticCurveTo(x, y, x + 20, y); c.clip();
             const hGrad = c.createLinearGradient(x, y, x, y + headerH); hGrad.addColorStop(0, "rgba(56, 189, 248, 0.2)"); hGrad.addColorStop(1, "rgba(56, 189, 248, 0.0)"); c.fillStyle = hGrad; c.fill();
             c.beginPath(); c.moveTo(x, y+headerH); c.lineTo(x+cardW, y+headerH); c.strokeStyle = "rgba(255,255,255,0.15)"; c.lineWidth = 2; c.stroke(); c.restore();
-
             drawLogo(c, match.t1, team1Logo, logoX, logoY, logoSize, true);
             const textX = logoX + logoSize + 30; const maxTextW = cardW - (textX - x) - 40; 
             c.textAlign = "left"; c.textBaseline = "alphabetic"; c.fillStyle = "white"; c.shadowColor = "rgba(0,0,0,0.8)"; c.shadowBlur = 4; c.shadowOffsetY = 2;
             fitText(c, (match.t1 || "TEAM NAME").toUpperCase(), textX, y + headerH * 0.55, maxTextW, cardH * 0.08, '900', 'Roboto Condensed');
             c.fillStyle = "#7dd3fc"; c.font = `700 ${cardH * 0.03}px 'Roboto'`; c.shadowBlur = 0; c.shadowOffsetY = 0; const subTitle = (match.summaryType === "BOWLING") ? "BOWLING CARD" : "ICC CHAMPIONS TROPHY"; c.fillText(subTitle, textX, y + headerH * 0.85);
-
             const startY = y + headerH + (cardH * 0.05); c.fillStyle = "#94a3b8"; c.font = `bold ${cardH * 0.028}px 'Roboto'`; c.textAlign = "left";
             let dataList = [];
             if (match.summaryType === "BOWLING") {
@@ -789,36 +790,70 @@
             const boxH = cardH * 0.7; const boxW = boxH * 1.8; const boxX = x + cardW - boxW - 30; const boxY = y + (cardH - boxH) / 2; c.save(); const boxGrad = c.createLinearGradient(boxX, boxY, boxX, boxY + boxH); boxGrad.addColorStop(0, "#3b82f6"); boxGrad.addColorStop(1, "#0f172a"); c.fillStyle = boxGrad; c.strokeStyle = "#cbd5e1"; c.lineWidth = 4; drawRoundRect(c, boxX, boxY, boxW, boxH, 15); c.fill(); c.stroke(); c.fillStyle = "white"; c.textAlign = "center"; c.font = `900 ${boxH * 0.6}px 'Anton'`; c.fillText(d.score, boxX + boxW/2, boxY + boxH * 0.55); c.font = `500 ${boxH * 0.2}px 'Roboto'`; c.fillText(`OFF ${d.balls}`, boxX + boxW/2, boxY + boxH * 0.85); c.restore(); c.restore();
         }
 
-        // --- RECORDING ---
+        // --- RECORDING (UPDATED FOR MP4 & FIX FREEZE) ---
         function toggleRecording() {
             const btn = document.getElementById('rec-button');
             const dot = document.getElementById('rec-indicator');
             const txt = document.getElementById('rec-text');
             
             if(isRecording) {
-                recorder.stop();
+                // STOPPING: Update UI IMMEDIATELY to prevent freeze perception
                 isRecording = false;
                 btn.classList.remove('recording');
                 dot.style.borderRadius = "50%";
                 txt.innerText = "REC";
+                
+                // Stop recorder asynchronously to unblock UI
+                setTimeout(() => { if(recorder) recorder.stop(); }, 50);
+
             } else {
+                // STARTING
                 const stream = canvas.captureStream(60); 
-                if(video.srcObject) { const audioTracks = video.srcObject.getAudioTracks(); if(audioTracks.length > 0) stream.addTrack(audioTracks[0]); }
-                let options = { mimeType: 'video/webm;codecs=vp9' };
-                if(!MediaRecorder.isTypeSupported(options.mimeType)) options = { mimeType: 'video/webm' };
-                try { recorder = new MediaRecorder(stream, options); } catch(e) { recorder = new MediaRecorder(stream); }
-                chunks = []; recorder.ondataavailable = e => { if(e.data.size) chunks.push(e.data); };
-                recorder.onstop = saveVideo; recorder.start();
+                if(video.srcObject) { 
+                    const audioTracks = video.srcObject.getAudioTracks(); 
+                    if(audioTracks.length > 0) stream.addTrack(audioTracks[0]); 
+                }
+                
+                // HIGH QUALITY SETTINGS (8 Mbps) & MP4 PREFERENCE
+                let options = { mimeType: 'video/mp4;codecs=avc1', videoBitsPerSecond: 8000000 };
+                if(!MediaRecorder.isTypeSupported(options.mimeType)) {
+                    options = { mimeType: 'video/webm;codecs=vp9', videoBitsPerSecond: 8000000 };
+                    if(!MediaRecorder.isTypeSupported(options.mimeType)) {
+                        options = { videoBitsPerSecond: 8000000 }; // Fallback
+                    }
+                }
+
+                try { 
+                    recorder = new MediaRecorder(stream, options); 
+                } catch(e) { 
+                    recorder = new MediaRecorder(stream); 
+                }
+
+                chunks = []; 
+                recorder.ondataavailable = e => { if(e.data.size) chunks.push(e.data); };
+                recorder.onstop = saveVideo; 
+                recorder.start();
+                
                 isRecording = true;
                 btn.classList.add('recording');
                 dot.style.borderRadius = "2px";
-                txt.innerText = "STOP";
+                txt.innerText = "RECORDING"; // Updated Text
             }
         }
+
         function saveVideo() {
-            const blob = new Blob(chunks, { type: 'video/webm' }); const url = URL.createObjectURL(blob);
-            const a = document.createElement('a'); a.style.display = 'none'; a.href = url; a.download = `Match_Rec_${Date.now()}.webm`; 
-            document.body.appendChild(a); a.click(); setTimeout(() => { document.body.removeChild(a); window.URL.revokeObjectURL(url); }, 100);
+            // Process blob in timeout to unblock main thread
+            setTimeout(() => {
+                const blob = new Blob(chunks, { type: 'video/mp4' }); // Force container label
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a'); 
+                a.style.display = 'none'; 
+                a.href = url; 
+                a.download = `Match_Rec_${Date.now()}.mp4`; // Save as MP4
+                document.body.appendChild(a); 
+                a.click(); 
+                setTimeout(() => { document.body.removeChild(a); window.URL.revokeObjectURL(url); }, 100);
+            }, 100);
         }
     </script>
 </body>
