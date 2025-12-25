@@ -729,112 +729,207 @@
             return false;
         }
 
-        // --- 1. REPLACED DRAW FUNCTION (POSITIONED ON GOLD LINE) ---
+        // --- 1. REPLACED DRAW FUNCTION (BROADCAST GRADE) ---
         function drawReplayOverlay(w, h) {
-            // 1. Setup Data
+            // --- CONFIGURATION ---
             let text = "", subText = "", color1 = "", color2 = "", shape = "";
+            let textOffset = 0; // Optical correction for vertical centering
 
             if (replayType === '6') {
                 text = "6"; subText = "MAXIMUM";
-                color1 = "#22c55e"; color2 = "#14532d"; shape = "HEX";
+                color1 = "#22c55e"; color2 = "#14532d"; // Emerald Greens
+                shape = "HEX";
+                textOffset = 0.05;
             } else if (replayType === '4') {
                 text = "4"; subText = "BOUNDARY";
-                color1 = "#3b82f6"; color2 = "#1e3a8a"; shape = "CIRCLE";
+                color1 = "#3b82f6"; color2 = "#172554"; // Royal Blues
+                shape = "CIRCLE";
+                textOffset = 0.05;
             } else if (replayType === 'W') {
                 text = "OUT"; subText = "WICKET";
-                color1 = "#ef4444"; color2 = "#7f1d1d"; shape = "BOX";
+                color1 = "#ef4444"; color2 = "#7f1d1d"; // Deep Reds
+                shape = "BOX";
+                textOffset = 0.02; // Text is smaller, needs less offset
             } else {
                 text = "R"; subText = "REPLAY";
-                color1 = "#f59e0b"; color2 = "#78350f"; shape = "CIRCLE";
+                color1 = "#f59e0b"; color2 = "#78350f"; 
+                shape = "CIRCLE";
+                textOffset = 0.05;
             }
 
-            // 2. Animation Math
+            // --- ANIMATION MATH ---
             const now = Date.now();
             const elapsed = now - replayStartTime;
-            const animDelay = 500; 
-            const animTime = Math.max(0, elapsed - animDelay);
-            let progress = animTime / 800; 
-            let scale = getElasticScale(progress);
-            if (progress >= 1) scale = 1 + (Math.sin(now / 300) * 0.03);
-
-            // 3. EXACT POSITIONING (ON TOP OF YELLOW LINE)
-            const badgeSize = h * 0.15; // Compact size
             
-            // Calculate Scoreboard Top (Gold Line Position)
+            // 1. Entrance Delay (Wait for Stinger to finish)
+            const animDelay = 300; 
+            const animTime = Math.max(0, elapsed - animDelay);
+            
+            // 2. Scale Physics (Elastic Pop)
+            let progress = animTime / 600; 
+            let scale = getElasticScale(progress);
+            
+            // 3. Heartbeat Pulse (Continuous)
+            if (progress >= 1) scale = 1 + (Math.sin(now / 400) * 0.02);
+
+            // 4. Sheen Position (Sweeping light effect)
+            const sheenPos = (now % 2000) / 2000; // 0 to 1 every 2 seconds
+
+            // --- POSITIONING ---
+            const badgeSize = h * 0.16; // 16% of screen height
+            
+            // Calculate Top of Scoreboard (Yellow Line)
             const barH = h * 0.095;
             const bottomY = h - barH - (h * 0.03); 
             const goldH = barH * 0.04;
             const goldY = bottomY - goldH - 2; 
 
-            // Position: 
-            // X: Left aligned (8% in)
-            // Y: Gold Line - Half Badge Height - Padding (rests on top)
-            const posX = w * 0.08; 
-            const posY = goldY - (badgeSize / 1.8); 
+            // Anchors
+            const posX = w * 0.09; 
+            // Sit exactly on top of the yellow line with slight padding
+            const posY = goldY - (badgeSize / 1.7); 
 
             ctx.save();
             ctx.translate(posX, posY);
             ctx.scale(scale, scale);
 
-            // --- A. Shadow ---
-            ctx.shadowColor = "rgba(0,0,0,0.6)"; ctx.shadowBlur = 15; ctx.shadowOffsetY = 8;
-
-            // --- B. Shape Background ---
-            const grad = ctx.createLinearGradient(-badgeSize/2, -badgeSize/2, badgeSize/2, badgeSize/2);
-            grad.addColorStop(0, color1); grad.addColorStop(1, color2);
-            ctx.fillStyle = grad; ctx.strokeStyle = "white"; ctx.lineWidth = 3;
-
-            ctx.beginPath();
-            if (shape === 'HEX') drawPolygon(ctx, 0, 0, badgeSize * 0.8, 6);
-            else if (shape === 'CIRCLE') ctx.arc(0, 0, badgeSize * 0.75, 0, Math.PI * 2);
-            else { 
-                ctx.moveTo(-badgeSize * 0.9, -badgeSize * 0.5);
-                ctx.lineTo(badgeSize * 0.9, -badgeSize * 0.5);
-                ctx.lineTo(badgeSize * 0.7, badgeSize * 0.5);
-                ctx.lineTo(-badgeSize * 0.7, badgeSize * 0.5);
-                ctx.closePath();
-            }
-            ctx.fill(); ctx.stroke();
-
-            // --- C. Main Text ---
-            ctx.shadowBlur = 0; ctx.fillStyle = "white"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-            const mainFontSize = text.length > 2 ? badgeSize * 0.5 : badgeSize * 0.9;
-            ctx.font = `900 ${mainFontSize}px 'Anton', sans-serif`;
-            ctx.lineWidth = 2; ctx.strokeStyle = "rgba(0,0,0,0.3)";
-            ctx.strokeText(text, 0, badgeSize * 0.05); ctx.fillText(text, 0, badgeSize * 0.05);
-
-            // --- D. Subtext Pill ---
-            const subY = badgeSize * 0.7;
-            ctx.fillStyle = "black";
-            ctx.beginPath();
-            ctx.roundRect(-badgeSize * 0.7, subY - 10, badgeSize * 1.4, 20, 10);
+            // --- LAYER 1: DROP SHADOW (Heavy TV Shadow) ---
+            ctx.save();
+            ctx.shadowColor = "rgba(0,0,0,0.7)";
+            ctx.shadowBlur = 20;
+            ctx.shadowOffsetY = 10;
+            
+            // Draw Shape Base for Shadow
+            ctx.fillStyle = "black"; // Filler for shadow
+            drawBadgeShape(ctx, shape, badgeSize);
             ctx.fill();
-            ctx.fillStyle = "#fbbf24"; ctx.font = `700 ${badgeSize * 0.18}px 'Roboto Condensed'`;
-            ctx.fillText(subText, 0, subY + 1);
+            ctx.restore();
 
-            // --- E. Replay Label ---
-            ctx.fillStyle = "white"; ctx.font = `700 ${badgeSize * 0.15}px 'Roboto'`;
-            ctx.fillText("ACTION REPLAY", 0, -badgeSize * 0.85);
+            // --- LAYER 2: MAIN GRADIENT BODY ---
+            const grad = ctx.createLinearGradient(-badgeSize/2, -badgeSize/2, badgeSize/2, badgeSize/2);
+            grad.addColorStop(0, color1);
+            grad.addColorStop(1, color2);
+            ctx.fillStyle = grad;
+            
+            // Draw Shape Body
+            drawBadgeShape(ctx, shape, badgeSize);
+            ctx.fill();
+
+            // --- LAYER 3: GLOSSY SHEEN (THE PROFESSIONAL TOUCH) ---
+            ctx.save();
+            drawBadgeShape(ctx, shape, badgeSize);
+            ctx.clip(); // Mask everything inside the badge
+            
+            // Draw moving shine
+            const sheenX = (sheenPos * badgeSize * 3) - (badgeSize * 1.5);
+            const sheenW = badgeSize * 0.4;
+            
+            const sheenGrad = ctx.createLinearGradient(sheenX, -badgeSize, sheenX + sheenW, badgeSize);
+            sheenGrad.addColorStop(0, "rgba(255,255,255,0)");
+            sheenGrad.addColorStop(0.5, "rgba(255,255,255,0.4)"); // Center shine
+            sheenGrad.addColorStop(1, "rgba(255,255,255,0)");
+            
+            ctx.fillStyle = sheenGrad;
+            // Skewed rectangle for the shine
+            ctx.transform(1, 0, -0.5, 1, 0, 0); 
+            ctx.fillRect(sheenX - badgeSize, -badgeSize, sheenW * 2, badgeSize * 2);
+            ctx.restore();
+
+            // --- LAYER 4: BORDER STROKE ---
+            ctx.strokeStyle = "white";
+            ctx.lineWidth = 4;
+            drawBadgeShape(ctx, shape, badgeSize);
+            ctx.stroke();
+
+            // --- LAYER 5: TYPOGRAPHY ---
+            ctx.fillStyle = "white";
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            
+            // Main Text (6, 4, OUT)
+            const fontSize = text.length > 2 ? badgeSize * 0.45 : badgeSize * 0.85;
+            ctx.font = `900 ${fontSize}px 'Anton', sans-serif`;
+            
+            // Text Drop Shadow (Hard Edge)
+            ctx.shadowColor = "rgba(0,0,0,0.5)";
+            ctx.shadowBlur = 0;
+            ctx.shadowOffsetX = 3;
+            ctx.shadowOffsetY = 3;
+            
+            ctx.fillText(text, 0, badgeSize * textOffset);
+            
+            // Reset Shadow for Subtext
+            ctx.shadowColor = "transparent";
+
+            // --- LAYER 6: SUBTEXT PILL ---
+            const subY = badgeSize * 0.65;
+            const pillW = badgeSize * 1.3;
+            const pillH = badgeSize * 0.22;
+            
+            ctx.fillStyle = "#0f172a"; // Dark Slate
+            ctx.beginPath();
+            ctx.roundRect(-pillW/2, subY, pillW, pillH, 8);
+            ctx.fill();
+            
+            // Gold Border on Pill
+            ctx.strokeStyle = "#fbbf24";
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            ctx.fillStyle = "#fbbf24"; // Gold Text
+            ctx.font = `700 ${badgeSize * 0.16}px 'Roboto Condensed'`;
+            // Optical center for pill text
+            ctx.fillText(subText, 0, subY + (pillH/2) + 1);
+
+            // --- LAYER 7: HEADER LABEL ---
+            ctx.fillStyle = "white";
+            ctx.font = `700 ${badgeSize * 0.14}px 'Roboto'`;
+            ctx.shadowColor = "black";
+            ctx.shadowBlur = 4;
+            ctx.fillText("ACTION REPLAY", 0, -badgeSize * 0.82);
 
             ctx.restore();
         }
 
-        // --- 2. HELPER: DRAW POLYGON ---
+        // --- HELPER: CENTRALIZED SHAPE DRAWING ---
+        function drawBadgeShape(ctx, shape, size) {
+            ctx.beginPath();
+            if (shape === 'HEX') {
+                drawPolygon(ctx, 0, 0, size * 0.75, 6);
+            } else if (shape === 'CIRCLE') {
+                ctx.arc(0, 0, size * 0.70, 0, Math.PI * 2);
+            } else if (shape === 'BOX') {
+                // Slightly tilted aggressive box for "OUT"
+                const w = size * 0.8;
+                const h = size * 0.5;
+                const tilt = size * 0.1;
+                ctx.moveTo(-w + tilt, -h);
+                ctx.lineTo(w + tilt, -h);
+                ctx.lineTo(w - tilt, h);
+                ctx.lineTo(-w - tilt, h);
+                ctx.closePath();
+            }
+        }
+
+        // --- HELPER: POLYGON MATH ---
         function drawPolygon(ctx, x, y, radius, sides) {
             if (sides < 3) return;
             const a = (Math.PI * 2) / sides;
-            ctx.moveTo(x + radius * Math.cos(0), y + radius * Math.sin(0));
+            // Rotate hexagon so point is at top
+            const rotateOffset = sides === 6 ? Math.PI / 2 : 0; 
+            
+            ctx.moveTo(x + radius * Math.cos(rotateOffset), y + radius * Math.sin(rotateOffset));
             for (let i = 1; i < sides; i++) {
-                ctx.lineTo(x + radius * Math.cos(a * i), y + radius * Math.sin(a * i));
+                ctx.lineTo(x + radius * Math.cos(a * i + rotateOffset), y + radius * Math.sin(a * i + rotateOffset));
             }
             ctx.closePath();
         }
 
-        // --- 3. HELPER: ELASTIC SCALE ---
+        // --- HELPER: ELASTIC PHYSICS ---
         function getElasticScale(t) {
             if (t <= 0) return 0;
             if (t >= 1) return 1;
-            const p = 0.4;
+            const p = 0.5;
             return Math.pow(2, -10 * t) * Math.sin((t - p / 4) * (2 * Math.PI) / p) + 1;
         }
             const labelText = (replayType === '6') ? "ACTION REPLAY • SIX RUNS" : (replayType === 'W' ? "ACTION REPLAY • WICKET" : "ACTION REPLAY");
