@@ -242,7 +242,7 @@
         </div>
     </div>
 
-    <script>
+<script>
         // --- FIREBASE CONFIG ---
         const firebaseConfig = { apiKey: "AIzaSyBqcD59IAPpKqk98oDZkgzgkoVZ8b8LGgY", authDomain: "livecricketscoring-92087.firebaseapp.com", databaseURL: "https://livecricketscoring-92087-default-rtdb.firebaseio.com", projectId: "livecricketscoring-92087", storageBucket: "livecricketscoring-92087.firebasestorage.app", messagingSenderId: "522927197627", appId: "1:522927197627:web:f1df5db736cae96893089e" };
         if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
@@ -266,9 +266,10 @@
         const ctx = canvas.getContext('2d');
         let recorder, chunks = [], isRecording = false;
 
-        // REPLAY VARIABLES
+        // --- REPLAY VARIABLES (FIXED) ---
         let replayRecorder = null;
         let replayChunks = [];
+        let replayHeader = null; // CRITICAL: STORES THE FILE HEADER
         let replayState = "LIVE"; 
         let replayStartTime = 0;
         let replayType = ""; 
@@ -354,72 +355,98 @@
             }
         }
 
-        // --- ROBUST REPLAY BUFFER (Increased to 20 chunks / ~20s) ---
+        // --- ROBUST REPLAY BUFFER (FIXED FOR BLACK SCREEN) ---
         function startRollingReplayBuffer(stream) {
             let mimeType = 'video/webm;codecs=vp9';
             if (!MediaRecorder.isTypeSupported(mimeType)) mimeType = 'video/mp4'; 
             if (!MediaRecorder.isTypeSupported(mimeType)) mimeType = ''; 
             
             try {
-                const options = mimeType ? { mimeType } : undefined;
+                const options = mimeType ? { mimeType, videoBitsPerSecond: 5000000 } : undefined;
                 replayRecorder = new MediaRecorder(stream, options);
                 
+                replayChunks = [];
+                replayHeader = null; // Reset header
+
                 replayRecorder.ondataavailable = (e) => {
                     if (e.data && e.data.size > 0) {
-                        replayChunks.push(e.data);
-                        // Store more chunks for longer replay (approx 20s)
-                        if(replayChunks.length > 20) {
+                        // 1. SAVE THE HEADER (First Chunk ever received)
+                        if (!replayHeader) {
+                            replayHeader = e.data;
+                            console.log("Replay Header Captured");
+                        } else {
+                            // 2. SAVE BODY CHUNKS
+                            replayChunks.push(e.data);
+                        }
+
+                        // 3. ROLLING BUFFER (Keep approx 15 seconds)
+                        // Important: We shift 'replayChunks', but NEVER remove 'replayHeader'
+                        if(replayChunks.length > 50) { 
                             replayChunks.shift();
                         }
                     }
                 };
                 
-                replayRecorder.start(1000); 
-                console.log("Replay buffer started");
+                // 400ms chunks = smoother playback boundaries than 1000ms
+                replayRecorder.start(400); 
+                console.log("Replay buffer started (Stable Mode)");
+
             } catch (e) {
                 console.warn("Replay not supported", e);
             }
         }
 
         function triggerReplay(type) {
-            if (replayChunks.length === 0) return;
+            if (!replayRecorder || !replayHeader) {
+                console.log("Replay failed: No Header or Recorder not ready");
+                return;
+            }
             
             console.log("Preparing Replay: " + type);
             replayType = type;
             
-            // 1. PAUSE MAIN VIDEO TO SAVE RESOURCES
+            // 1. FORCE LATEST DATA
+            replayRecorder.requestData();
+
+            // 2. PAUSE MAIN VIDEO (Saves GPU)
             video.pause();
 
-            // 2. CLEANUP OLD VIDEO
+            // 3. CLEANUP OLD
             if (replayVideo) {
                 if(replayBlobUrl) URL.revokeObjectURL(replayBlobUrl);
                 replayVideo.remove();
                 replayVideo = null;
             }
 
-            // 3. CREATE NEW VIDEO ELEMENT
+            // 4. CONSTRUCT BLOB (HEADER + CHUNKS)
+            // This fixes the black screen by stitching the Header to the body
+            const fullBlob = [replayHeader, ...replayChunks];
+            const blob = new Blob(fullBlob, { type: replayHeader.type });
+            replayBlobUrl = URL.createObjectURL(blob);
+
+            // 5. CREATE VIDEO ELEMENT
             replayVideo = document.createElement('video');
             replayVideo.id = "replay-source";
             replayVideo.muted = true;
-            replayVideo.autoplay = true;
-            replayVideo.playsInline = true;
-            // Hide it visually, we draw to canvas
-            replayVideo.style.cssText = "position:absolute; top:0; left:0; width:100%; height:100%; object-fit:cover; z-index:0; opacity:0;";
-            document.getElementById('app-container').appendChild(replayVideo);
+            replayVideo.playsInline = true; 
+            // Hide from DOM, draw via Canvas
+            replayVideo.style.cssText = "position:absolute; top:0; left:0; width:1px; height:1px; opacity:0; pointer-events:none;";
+            document.body.appendChild(replayVideo);
 
-            // 4. LOAD BLOB
-            const blob = new Blob(replayChunks, { type: replayChunks[0].type });
-            replayBlobUrl = URL.createObjectURL(blob);
-            
             replayVideo.src = replayBlobUrl;
-            replayVideo.playbackRate = 0.6; // SLOW MOTION
+            replayVideo.playbackRate = 0.5; // SMOOTH SLOW MOTION
+
+            // 6. WAIT FOR READY (Fixes Wobbly/Stuck Start)
+            replayVideo.oncanplay = () => {
+                replayVideo.play().then(() => {
+                    // Start Animation ONLY when video is actually playing
+                    replayState = "TRANSITION_IN";
+                    transitionStartTime = Date.now();
+                }).catch(e => console.log("Replay Play Error", e));
+            };
             
-            replayVideo.load();
-            replayVideo.play().catch(e => console.log("Replay autoplay blocked", e));
-            
-            // 5. START ANIMATION
-            replayState = "TRANSITION_IN";
-            transitionStartTime = Date.now();
+            // Failsafe: If video never loads, cancel replay after 2s
+            replayVideo.onerror = () => { cleanupReplay(); };
         }
 
         function cleanupReplay() {
@@ -438,6 +465,18 @@
             // RESUME MAIN VIDEO
             video.play().catch(e => console.log("Resume live video failed", e));
             replayState = "LIVE";
+
+            // CRITICAL FIX: RESET RECORDER FOR NEXT BALL
+            // This prevents "stuck" buffers by starting fresh every time
+            if(replayRecorder && replayRecorder.state !== "inactive") {
+                replayRecorder.stop();
+                setTimeout(() => {
+                    replayChunks = [];
+                    replayHeader = null; // Clear header so we capture a new, fresh one
+                    replayRecorder.start(400);
+                    console.log("Replay Buffer Reset for Next Ball");
+                }, 100);
+            }
         }
 
         // --- MENUS & LOGIC ---
@@ -605,7 +644,7 @@
                 if(replayVideo) drawVideoObject(replayVideo, w, h);
                 drawReplayOverlay(w, h); // TEXT
                 
-                // Play for 15 seconds max
+                // Play for 15 seconds max OR until video ends
                 if ((replayVideo && replayVideo.ended) || (Date.now() - replayStartTime > 15000)) { 
                     replayState = "TRANSITION_OUT";
                     transitionStartTime = Date.now();
@@ -636,7 +675,7 @@
             }
         }
 
-        // --- COOL STINGER ANIMATION (Fixed Split Screen Bug) ---
+        // --- COOL STINGER ANIMATION ---
         function drawCoolStinger(w, h, direction) {
             const now = Date.now();
             const elapsed = now - transitionStartTime;
@@ -661,7 +700,7 @@
                 ctx.fillStyle = `rgba(15, 23, 42, ${coverAlpha})`; 
                 ctx.fillRect(0,0,w,h);
                 
-                // Moving Stripes (No Skew to prevent artifacts)
+                // Moving Stripes
                 const offset = (ease * w * 1.5) - (w * 0.25);
                 
                 ctx.beginPath();
@@ -686,12 +725,118 @@
                 }
             }
 
-            ctx.restore(); // CORRECT RESTORE
+            ctx.restore(); 
             return false;
         }
 
-        // --- REPLAY OVERLAY (Higher Position) ---
+        // --- 1. REPLACED DRAW FUNCTION (POSITIONED ON GOLD LINE) ---
         function drawReplayOverlay(w, h) {
+            // 1. Setup Data
+            let text = "", subText = "", color1 = "", color2 = "", shape = "";
+
+            if (replayType === '6') {
+                text = "6"; subText = "MAXIMUM";
+                color1 = "#22c55e"; color2 = "#14532d"; shape = "HEX";
+            } else if (replayType === '4') {
+                text = "4"; subText = "BOUNDARY";
+                color1 = "#3b82f6"; color2 = "#1e3a8a"; shape = "CIRCLE";
+            } else if (replayType === 'W') {
+                text = "OUT"; subText = "WICKET";
+                color1 = "#ef4444"; color2 = "#7f1d1d"; shape = "BOX";
+            } else {
+                text = "R"; subText = "REPLAY";
+                color1 = "#f59e0b"; color2 = "#78350f"; shape = "CIRCLE";
+            }
+
+            // 2. Animation Math
+            const now = Date.now();
+            const elapsed = now - replayStartTime;
+            const animDelay = 500; 
+            const animTime = Math.max(0, elapsed - animDelay);
+            let progress = animTime / 800; 
+            let scale = getElasticScale(progress);
+            if (progress >= 1) scale = 1 + (Math.sin(now / 300) * 0.03);
+
+            // 3. EXACT POSITIONING (ON TOP OF YELLOW LINE)
+            const badgeSize = h * 0.15; // Compact size
+            
+            // Calculate Scoreboard Top (Gold Line Position)
+            const barH = h * 0.095;
+            const bottomY = h - barH - (h * 0.03); 
+            const goldH = barH * 0.04;
+            const goldY = bottomY - goldH - 2; 
+
+            // Position: 
+            // X: Left aligned (8% in)
+            // Y: Gold Line - Half Badge Height - Padding (rests on top)
+            const posX = w * 0.08; 
+            const posY = goldY - (badgeSize / 1.8); 
+
+            ctx.save();
+            ctx.translate(posX, posY);
+            ctx.scale(scale, scale);
+
+            // --- A. Shadow ---
+            ctx.shadowColor = "rgba(0,0,0,0.6)"; ctx.shadowBlur = 15; ctx.shadowOffsetY = 8;
+
+            // --- B. Shape Background ---
+            const grad = ctx.createLinearGradient(-badgeSize/2, -badgeSize/2, badgeSize/2, badgeSize/2);
+            grad.addColorStop(0, color1); grad.addColorStop(1, color2);
+            ctx.fillStyle = grad; ctx.strokeStyle = "white"; ctx.lineWidth = 3;
+
+            ctx.beginPath();
+            if (shape === 'HEX') drawPolygon(ctx, 0, 0, badgeSize * 0.8, 6);
+            else if (shape === 'CIRCLE') ctx.arc(0, 0, badgeSize * 0.75, 0, Math.PI * 2);
+            else { 
+                ctx.moveTo(-badgeSize * 0.9, -badgeSize * 0.5);
+                ctx.lineTo(badgeSize * 0.9, -badgeSize * 0.5);
+                ctx.lineTo(badgeSize * 0.7, badgeSize * 0.5);
+                ctx.lineTo(-badgeSize * 0.7, badgeSize * 0.5);
+                ctx.closePath();
+            }
+            ctx.fill(); ctx.stroke();
+
+            // --- C. Main Text ---
+            ctx.shadowBlur = 0; ctx.fillStyle = "white"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+            const mainFontSize = text.length > 2 ? badgeSize * 0.5 : badgeSize * 0.9;
+            ctx.font = `900 ${mainFontSize}px 'Anton', sans-serif`;
+            ctx.lineWidth = 2; ctx.strokeStyle = "rgba(0,0,0,0.3)";
+            ctx.strokeText(text, 0, badgeSize * 0.05); ctx.fillText(text, 0, badgeSize * 0.05);
+
+            // --- D. Subtext Pill ---
+            const subY = badgeSize * 0.7;
+            ctx.fillStyle = "black";
+            ctx.beginPath();
+            ctx.roundRect(-badgeSize * 0.7, subY - 10, badgeSize * 1.4, 20, 10);
+            ctx.fill();
+            ctx.fillStyle = "#fbbf24"; ctx.font = `700 ${badgeSize * 0.18}px 'Roboto Condensed'`;
+            ctx.fillText(subText, 0, subY + 1);
+
+            // --- E. Replay Label ---
+            ctx.fillStyle = "white"; ctx.font = `700 ${badgeSize * 0.15}px 'Roboto'`;
+            ctx.fillText("ACTION REPLAY", 0, -badgeSize * 0.85);
+
+            ctx.restore();
+        }
+
+        // --- 2. HELPER: DRAW POLYGON ---
+        function drawPolygon(ctx, x, y, radius, sides) {
+            if (sides < 3) return;
+            const a = (Math.PI * 2) / sides;
+            ctx.moveTo(x + radius * Math.cos(0), y + radius * Math.sin(0));
+            for (let i = 1; i < sides; i++) {
+                ctx.lineTo(x + radius * Math.cos(a * i), y + radius * Math.sin(a * i));
+            }
+            ctx.closePath();
+        }
+
+        // --- 3. HELPER: ELASTIC SCALE ---
+        function getElasticScale(t) {
+            if (t <= 0) return 0;
+            if (t >= 1) return 1;
+            const p = 0.4;
+            return Math.pow(2, -10 * t) * Math.sin((t - p / 4) * (2 * Math.PI) / p) + 1;
+        }
             const labelText = (replayType === '6') ? "ACTION REPLAY • SIX RUNS" : (replayType === 'W' ? "ACTION REPLAY • WICKET" : "ACTION REPLAY");
             const color = (replayType === '6') ? "#22c55e" : (replayType === 'W' ? "#ef4444" : "#3b82f6");
 
@@ -735,8 +880,7 @@
             ctx.fillText(labelText, marginX + 45, overlayY + (boxH/2) + 2);
             
             ctx.restore();
-        }
-
+        
         // --- LIVE GRAPHICS ---
         function drawLiveGraphics(w, h) {
             if (match.showDismissalCard === true && match.dismissalData) {
