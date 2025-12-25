@@ -355,98 +355,133 @@
             }
         }
 
-        // --- ROBUST REPLAY BUFFER (FIXED FOR BLACK SCREEN) ---
+        // --- 1. ROBUST BUFFER (Mobile & Desktop Compatible) ---
         function startRollingReplayBuffer(stream) {
-            let mimeType = 'video/webm;codecs=vp9';
-            if (!MediaRecorder.isTypeSupported(mimeType)) mimeType = 'video/mp4'; 
-            if (!MediaRecorder.isTypeSupported(mimeType)) mimeType = ''; 
-            
+            // A. Detect Mobile to lower bitrate (prevents crashes)
+            const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+            const bitRate = isMobile ? 2500000 : 8000000; // 2.5Mbps (Mobile) vs 8Mbps (PC)
+
+            // B. Find the best supported MimeType
+            const types = [
+                "video/mp4", 
+                "video/mp4;codecs=avc1", 
+                "video/webm;codecs=h264", 
+                "video/webm;codecs=vp9", 
+                "video/webm"
+            ];
+
+            let selectedType = "";
+            for (const t of types) {
+                if (MediaRecorder.isTypeSupported(t)) {
+                    selectedType = t;
+                    break;
+                }
+            }
+
+            if (!selectedType) {
+                console.error("No supported recording format found on this device.");
+                return;
+            }
+
+            console.log(`Starting Replay Buffer. Type: ${selectedType}, Mobile: ${isMobile}`);
+
             try {
-                const options = mimeType ? { mimeType, videoBitsPerSecond: 5000000 } : undefined;
+                const options = { mimeType: selectedType, videoBitsPerSecond: bitRate };
                 replayRecorder = new MediaRecorder(stream, options);
                 
                 replayChunks = [];
-                replayHeader = null; // Reset header
+                replayHeader = null; 
 
                 replayRecorder.ondataavailable = (e) => {
                     if (e.data && e.data.size > 0) {
-                        // 1. SAVE THE HEADER (First Chunk ever received)
+                        // 1. Capture Header
                         if (!replayHeader) {
                             replayHeader = e.data;
-                            console.log("Replay Header Captured");
                         } else {
-                            // 2. SAVE BODY CHUNKS
+                            // 2. Capture Body
                             replayChunks.push(e.data);
                         }
 
-                        // 3. ROLLING BUFFER (Keep approx 15 seconds)
-                        // Important: We shift 'replayChunks', but NEVER remove 'replayHeader'
-                        if(replayChunks.length > 50) { 
+                        // 3. Keep buffer tight (Mobile needs smaller buffer to save RAM)
+                        const maxChunks = isMobile ? 30 : 60; 
+                        if(replayChunks.length > maxChunks) { 
                             replayChunks.shift();
                         }
                     }
                 };
                 
-                // 400ms chunks = smoother playback boundaries than 1000ms
+                // 400ms slices for smooth stitching
                 replayRecorder.start(400); 
-                console.log("Replay buffer started (Stable Mode)");
 
             } catch (e) {
-                console.warn("Replay not supported", e);
+                console.warn("Replay Start Failed:", e);
+                alert("Replay feature not supported on this browser.");
             }
         }
 
+        // --- 2. ROBUST TRIGGER (Fixes "Black Screen" on Phone) ---
         function triggerReplay(type) {
             if (!replayRecorder || !replayHeader) {
-                console.log("Replay failed: No Header or Recorder not ready");
+                console.log("Replay failed: Recorder not ready");
                 return;
             }
             
             console.log("Preparing Replay: " + type);
             replayType = type;
             
-            // 1. FORCE LATEST DATA
+            // 1. Force data flush
             replayRecorder.requestData();
 
-            // 2. PAUSE MAIN VIDEO (Saves GPU)
+            // 2. Pause Live Video
             video.pause();
 
-            // 3. CLEANUP OLD
+            // 3. Cleanup Previous
             if (replayVideo) {
                 if(replayBlobUrl) URL.revokeObjectURL(replayBlobUrl);
                 replayVideo.remove();
                 replayVideo = null;
             }
 
-            // 4. CONSTRUCT BLOB (HEADER + CHUNKS)
-            // This fixes the black screen by stitching the Header to the body
+            // 4. Create Blob
             const fullBlob = [replayHeader, ...replayChunks];
             const blob = new Blob(fullBlob, { type: replayHeader.type });
             replayBlobUrl = URL.createObjectURL(blob);
 
-            // 5. CREATE VIDEO ELEMENT
+            // 5. Create Video Element (WITH MOBILE ATTRIBUTES)
             replayVideo = document.createElement('video');
             replayVideo.id = "replay-source";
-            replayVideo.muted = true;
-            replayVideo.playsInline = true; 
-            // Hide from DOM, draw via Canvas
-            replayVideo.style.cssText = "position:absolute; top:0; left:0; width:1px; height:1px; opacity:0; pointer-events:none;";
+            replayVideo.muted = true; // Required for autoplay
+            replayVideo.playsInline = true; // REQUIRED FOR IPHONE
+            replayVideo.setAttribute('playsinline', ''); // Double check for iOS
+            replayVideo.setAttribute('webkit-playsinline', '');
+            
+            // Keep it technically visible but hidden, or iOS won't render it
+            replayVideo.style.cssText = "position:absolute; top:0; left:0; width:1px; height:1px; opacity:0.01; pointer-events:none;";
             document.body.appendChild(replayVideo);
 
             replayVideo.src = replayBlobUrl;
-            replayVideo.playbackRate = 0.5; // SMOOTH SLOW MOTION
+            replayVideo.playbackRate = 0.5; 
 
-            // 6. WAIT FOR READY (Fixes Wobbly/Stuck Start)
-            replayVideo.oncanplay = () => {
-                replayVideo.play().then(() => {
-                    // Start Animation ONLY when video is actually playing
+            // 6. Robust Play Logic
+            const playPromise = replayVideo.play();
+            
+            if (playPromise !== undefined) {
+                playPromise.then(() => {
+                    // Playback started successfully
                     replayState = "TRANSITION_IN";
                     transitionStartTime = Date.now();
-                }).catch(e => console.log("Replay Play Error", e));
-            };
+                }).catch(error => {
+                    console.log("Auto-play prevented:", error);
+                    // Fallback: If autoplay fails, just resume live video
+                    cleanupReplay();
+                });
+            }
             
-            // Failsafe: If video never loads, cancel replay after 2s
-            replayVideo.onerror = () => { cleanupReplay(); };
+            // Failsafe Timeout
+            replayVideo.onerror = () => { 
+                console.log("Video Load Error");
+                cleanupReplay(); 
+            };
         }
 
         function cleanupReplay() {
@@ -932,50 +967,7 @@
             const p = 0.5;
             return Math.pow(2, -10 * t) * Math.sin((t - p / 4) * (2 * Math.PI) / p) + 1;
         }
-            const labelText = (replayType === '6') ? "ACTION REPLAY • SIX RUNS" : (replayType === 'W' ? "ACTION REPLAY • WICKET" : "ACTION REPLAY");
-            const color = (replayType === '6') ? "#22c55e" : (replayType === 'W' ? "#ef4444" : "#3b82f6");
 
-            const barH = h * 0.095;
-            const bottomY = h - barH - (h * 0.03); 
-            // Position: Left Side, 160px above Scoreboard
-            const overlayY = bottomY - 160; 
-            const marginX = w * 0.03;
-            
-            ctx.save();
-            ctx.font = "900 32px 'Roboto Condensed'"; // Bigger Text
-            const textW = ctx.measureText(labelText).width;
-            
-            // Box
-            ctx.fillStyle = "rgba(0,0,0,0.9)";
-            const boxH = 50;
-            const pad = 20;
-            
-            ctx.beginPath();
-            ctx.moveTo(marginX, overlayY);
-            ctx.lineTo(marginX + textW + (pad*3), overlayY);
-            ctx.lineTo(marginX + textW + (pad*2), overlayY + boxH);
-            ctx.lineTo(marginX, overlayY + boxH);
-            ctx.fill();
-
-            // Accent Line
-            ctx.fillStyle = color;
-            ctx.fillRect(marginX, overlayY, 8, boxH);
-
-            // Blinking Dot
-            if (Math.floor(Date.now() / 400) % 2 === 0) {
-                ctx.fillStyle = "white";
-                ctx.beginPath();
-                ctx.arc(marginX + 25, overlayY + (boxH/2), 8, 0, Math.PI * 2);
-                ctx.fill();
-            }
-
-            // Text
-            ctx.fillStyle = "white";
-            ctx.textBaseline = "middle";
-            ctx.fillText(labelText, marginX + 45, overlayY + (boxH/2) + 2);
-            
-            ctx.restore();
-        
         // --- LIVE GRAPHICS ---
         function drawLiveGraphics(w, h) {
             if (match.showDismissalCard === true && match.dismissalData) {
