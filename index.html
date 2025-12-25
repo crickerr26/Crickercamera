@@ -19,8 +19,8 @@
         #app-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
         #receiver-container { display:none; position: absolute; top:0; left:0; width:100%; height:100%; background:black; z-index: 999; }
         
-        /* HIDDEN VIDEO SOURCE (Phone Camera) */
-        #video-source { 
+        /* HIDDEN VIDEO SOURCES */
+        #video-source, #replay-source { 
             position: absolute; top: 0; left: 0; 
             width: 100%; height: 100%; 
             object-fit: cover; 
@@ -214,11 +214,10 @@
                 <input type="range" id="zoom-slider" orient="vertical" min="1" max="10" step="0.1" value="1" oninput="applyZoom(this.value)">
                 <div class="zoom-btn" onclick="stepZoom(-1)">-</div>
             </div>
-
-            </div>
+        </div>
         
         <video id="video-source" autoplay playsinline muted></video>
-        <canvas id="broadcast-canvas"></canvas>
+        <video id="replay-source" playsinline muted></video> <canvas id="broadcast-canvas"></canvas>
     </div>
 
     <div id="receiver-container">
@@ -259,9 +258,20 @@
         crickerrLogoImg.src = 'crickerrlogo.png';
 
         const video = document.getElementById('video-source');
+        const replayVideo = document.getElementById('replay-source'); // NEW
         const canvas = document.getElementById('broadcast-canvas');
         const ctx = canvas.getContext('2d');
         let recorder, chunks = [], isRecording = false;
+
+        // REPLAY VARIABLES (NEW)
+        let replayRecorder = null;
+        let replayChunks = [];
+        let replayState = "LIVE"; // LIVE, TRANSITION_IN, PLAYING, TRANSITION_OUT
+        let replayStartTime = 0;
+        let replayType = ""; // '4', '6', 'W'
+        let transitionStartTime = 0;
+        const REPLAY_DURATION_SEC = 8; // Keep last 8 seconds
+        const TRANSITION_DURATION = 800; // ms
 
         // ZOOM VARIABLES
         let currentStream = null; 
@@ -316,7 +326,6 @@
 
         // --- QUALITY CONTROL LOGIC ---
         async function startCameraStream(width, height) {
-            // Stop existing stream if any
             if(currentStream) {
                 currentStream.getTracks().forEach(track => track.stop());
             }
@@ -326,7 +335,7 @@
                     facingMode: "environment", 
                     width: { ideal: width }, 
                     height: { ideal: height },
-                    frameRate: { ideal: 60 } // Try 60fps
+                    frameRate: { ideal: 60 } 
                 }, 
                 audio: true 
             };
@@ -338,12 +347,14 @@
                 video.muted = true;
                 video.play().catch(e => console.error(e));
 
+                // START ROLLING BUFFER FOR REPLAY
+                startRollingReplayBuffer(stream);
+
                 // Update Quality Badge Text
                 const actualH = stream.getVideoTracks()[0].getSettings().height;
                 const label = actualH > 1080 ? "4K" : (actualH > 720 ? "1080p" : "720p");
                 document.getElementById('quality-badge').innerText = label;
 
-                // Setup Zoom again for new stream
                 videoTrack = stream.getVideoTracks()[0];
                 setupZoom();
 
@@ -353,15 +364,66 @@
             }
         }
 
+        // --- REPLAY BUFFER LOGIC (NEW) ---
+        function startRollingReplayBuffer(stream) {
+            // Check MIME Type support
+            let mimeType = 'video/webm;codecs=vp9';
+            if (!MediaRecorder.isTypeSupported(mimeType)) {
+                mimeType = 'video/mp4'; 
+                if (!MediaRecorder.isTypeSupported(mimeType)) mimeType = ''; // Default
+            }
+            
+            try {
+                const options = mimeType ? { mimeType } : undefined;
+                replayRecorder = new MediaRecorder(stream, options);
+                
+                replayRecorder.ondataavailable = (e) => {
+                    if (e.data && e.data.size > 0) {
+                        replayChunks.push(e.data);
+                        // Keep only last ~8-10 seconds (approx 8-10 chunks if 1s each)
+                        if(replayChunks.length > 10) {
+                            replayChunks.shift();
+                        }
+                    }
+                };
+                
+                // Record in 1-second slices to build rolling buffer
+                replayRecorder.start(1000); 
+                console.log("Replay buffer started");
+            } catch (e) {
+                console.warn("Replay not supported on this device", e);
+            }
+        }
+
+        function triggerReplay(type) {
+            if (replayChunks.length === 0) return;
+            
+            console.log("Triggering Replay: " + type);
+            replayType = type;
+            replayState = "TRANSITION_IN";
+            transitionStartTime = Date.now();
+
+            // Compile Blob
+            const blob = new Blob(replayChunks, { type: replayChunks[0].type });
+            const url = URL.createObjectURL(blob);
+            replayVideo.src = url;
+            replayVideo.playbackRate = 0.6; // SLOW MOTION
+            
+            // Audio Trigger (Wait for video to start)
+            replayVideo.onloadeddata = () => {
+                // Audio is handled by separate elements in listenToDB
+            };
+        }
+
         // --- MENUS & NEW MATCH LOGIC ---
         function toggleQualityMenu() {
-            document.getElementById('settings-menu').style.display = 'none'; // Close other menu
+            document.getElementById('settings-menu').style.display = 'none'; 
             const menu = document.getElementById('quality-menu');
             menu.style.display = menu.style.display === 'flex' ? 'none' : 'flex';
         }
 
         function toggleSettingsMenu() {
-            document.getElementById('quality-menu').style.display = 'none'; // Close other menu
+            document.getElementById('quality-menu').style.display = 'none'; 
             const menu = document.getElementById('settings-menu');
             menu.style.display = menu.style.display === 'flex' ? 'none' : 'flex';
         }
@@ -369,7 +431,7 @@
         function changeMatchId() {
             const newId = prompt("Enter New Match ID:");
             if(newId && newId.trim() !== "") {
-                window.location.search = `?id=${newId.trim()}`; // Reloads page with new ID
+                window.location.search = `?id=${newId.trim()}`; 
             }
         }
 
@@ -467,14 +529,21 @@
                     if(data.t2Logo && (!team2Logo || team2Logo.src !== data.t2Logo)) { team2Logo = new Image(); team2Logo.src = data.t2Logo; }
                     if (data.lastAction && data.lastAction.id !== lastActionId) { 
                         lastActionId = data.lastAction.id; 
-                        triggerAnim(data.lastAction.type); 
+                        
+                        // PLAY SOUND
+                        triggerAudio(data.lastAction.type);
+
+                        // TRIGGER REPLAY FOR BIG EVENTS
+                        if(['4', '6', 'W'].includes(data.lastAction.type)) {
+                            // Delay slightly to capture the celebration/reaction in buffer
+                            setTimeout(() => triggerReplay(data.lastAction.type), 1500); 
+                        }
                     }
                 }
             });
         }
 
-        function triggerAnim(type) {
-            animType = type; animTime = Date.now();
+        function triggerAudio(type) {
             const audioId = type === '4' ? 'audio-four' : type === '6' ? 'audio-six' : type === 'W' ? 'audio-wicket' : null;
             if (audioId) {
                 const audio = document.getElementById(audioId);
@@ -483,15 +552,61 @@
             }
         }
 
-        // --- RENDER LOOP ---
+        // --- MAIN RENDER LOOP ---
         function renderLoop() {
             const w = window.innerWidth;
             const h = window.innerHeight;
             
             ctx.clearRect(0, 0, w, h);
             
-            if (video.readyState >= 2) {
-                const vidRatio = video.videoWidth / video.videoHeight;
+            // --- STATE MACHINE FOR RENDER ---
+            
+            if (replayState === "LIVE") {
+                // 1. Draw Live Video
+                drawVideoObject(video, w, h);
+                // 2. Draw Live Graphics
+                drawLiveGraphics(w, h);
+            
+            } else if (replayState === "TRANSITION_IN") {
+                // Draw Live Video Background
+                drawVideoObject(video, w, h);
+                // Draw Stinger Animation
+                let finished = drawStinger(w, h, "IN");
+                if (finished) {
+                    replayState = "PLAYING";
+                    replayVideo.play().catch(e => console.log("Replay play error", e));
+                    replayStartTime = Date.now();
+                }
+
+            } else if (replayState === "PLAYING") {
+                // Draw Replay Video
+                drawVideoObject(replayVideo, w, h);
+                // Draw Replay Overlay
+                drawReplayOverlay(w, h);
+                
+                // End Replay Logic
+                if (replayVideo.ended || (Date.now() - replayStartTime > 8000)) { // Max 8 sec replay
+                    replayState = "TRANSITION_OUT";
+                    transitionStartTime = Date.now();
+                }
+
+            } else if (replayState === "TRANSITION_OUT") {
+                // Draw Live Video (so we reveal it)
+                drawVideoObject(video, w, h);
+                // Draw Stinger Animation
+                let finished = drawStinger(w, h, "OUT");
+                if (finished) {
+                    replayState = "LIVE";
+                    replayVideo.pause();
+                }
+            }
+            
+            requestAnimationFrame(renderLoop);
+        }
+
+        function drawVideoObject(vidObj, w, h) {
+            if (vidObj.readyState >= 2) {
+                const vidRatio = vidObj.videoWidth / vidObj.videoHeight;
                 const screenRatio = w / h;
                 let drawW, drawH, drawX, drawY;
                 if (screenRatio > vidRatio) {
@@ -499,9 +614,107 @@
                 } else {
                     drawW = h * vidRatio; drawH = h; drawX = (w - drawW) / 2; drawY = 0;
                 }
-                ctx.drawImage(video, drawX, drawY, drawW, drawH);
+                ctx.drawImage(vidObj, drawX, drawY, drawW, drawH);
+            }
+        }
+
+        // --- STINGER ANIMATION (Colorful Wipe) ---
+        function drawStinger(w, h, direction) {
+            const now = Date.now();
+            const elapsed = now - transitionStartTime;
+            const duration = 600; // Fast wipe
+            let progress = elapsed / duration;
+            if (progress > 1) return true;
+
+            // Ease in/out
+            const ease = progress < 0.5 ? 2 * progress * progress : -1 + (4 - 2 * progress) * progress;
+            
+            // X position of the diagonal bar
+            let xPos = (direction === "IN") ? (w * 1.5) - (w * 2.5 * ease) : (w * -1.5) + (w * 2.5 * ease);
+            
+            ctx.save();
+            ctx.translate(xPos, 0);
+            
+            // Draw Angled Colour Bars
+            const barW = w * 0.4;
+            const skew = -0.3; // Skew angle
+            
+            ctx.transform(1, 0, skew, 1, 0, 0); // Apply Skew
+
+            // 1. Blue Bar
+            ctx.fillStyle = "#3b82f6";
+            ctx.fillRect(0, 0, barW, h);
+            
+            // 2. Gold Bar
+            ctx.fillStyle = "#fbbf24";
+            ctx.fillRect(barW * 0.3, 0, barW * 0.4, h);
+
+            // 3. Logo in Center of Stinger
+            if (crickerrLogoImg.complete) {
+                const ls = h * 0.4;
+                ctx.drawImage(crickerrLogoImg, (barW/2) - (ls/2), (h/2) - (ls/2), ls, ls);
             }
 
+            ctx.restore();
+            
+            // Full Screen Cover at peak
+            if (progress > 0.4 && progress < 0.6) {
+                ctx.fillStyle = "#0f172a";
+                ctx.fillRect(0, 0, w, h);
+                // Draw centered logo
+                if (crickerrLogoImg.complete) {
+                    const centerS = h * 0.5;
+                    ctx.drawImage(crickerrLogoImg, (w-centerS)/2, (h-centerS)/2, centerS, centerS);
+                }
+            }
+
+            return false;
+        }
+
+        // --- REPLAY OVERLAY ---
+        function drawReplayOverlay(w, h) {
+            // Top Left "ACTION REPLAY" Tag
+            const labelText = (replayType === '6') ? "ACTION REPLAY • SIX RUNS" : (replayType === 'W' ? "ACTION REPLAY • WICKET" : "ACTION REPLAY");
+            const color = (replayType === '6') ? "#22c55e" : (replayType === 'W' ? "#ef4444" : "#3b82f6");
+
+            ctx.save();
+            // Blinking Red Dot
+            if (Math.floor(Date.now() / 500) % 2 === 0) {
+                ctx.fillStyle = color;
+                ctx.beginPath();
+                ctx.arc(40, 40, 10, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            // Text Bg
+            ctx.fillStyle = "rgba(0,0,0,0.7)";
+            ctx.font = "900 24px 'Roboto Condensed'";
+            const textW = ctx.measureText(labelText).width;
+            
+            ctx.beginPath();
+            ctx.moveTo(60, 20);
+            ctx.lineTo(60 + textW + 40, 20);
+            ctx.lineTo(60 + textW + 20, 60);
+            ctx.lineTo(60, 60);
+            ctx.fill();
+
+            // Text
+            ctx.fillStyle = "white";
+            ctx.fillText(labelText, 75, 48);
+            
+            // Border
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(60, 60);
+            ctx.lineTo(60 + textW + 20, 60);
+            ctx.stroke();
+
+            ctx.restore();
+        }
+
+        // --- LIVE GRAPHICS ---
+        function drawLiveGraphics(w, h) {
             if (match.showDismissalCard === true && match.dismissalData) {
                 drawDismissalCard(ctx, w, h);
             } 
@@ -512,8 +725,6 @@
                 drawNewLayout(ctx, w, h);
                 drawPopups(ctx, w, h);
             }
-            
-            requestAnimationFrame(renderLoop);
         }
 
         // --- GRAPHICS FUNCTIONS ---
@@ -610,18 +821,16 @@
             c.clip();
             c.restore();
             
-            // --- DRAW CRICKERR LOGO (PROFESSIONAL PLACEMENT) ---
+            // --- DRAW CRICKERR LOGO (UPDATED SIZE & POSITION) ---
             if (crickerrLogoImg.complete && crickerrLogoImg.naturalHeight !== 0) {
-                const cLogoH = barH * 0.55; // Height relative to scoreboard bar
+                const cLogoH = barH * 0.75; // INCREASED SIZE (was 0.55)
                 const aspectRatio = crickerrLogoImg.width / crickerrLogoImg.height;
                 const cLogoW = cLogoH * aspectRatio;
 
-                // Position: Right aligned with scoreboard, sitting directly ABOVE gold line
-                const cLogoX = (pillX + pillW) - cLogoW; // Right align with pill end
-                const cLogoY = goldY - cLogoH - (h * 0.005); // Sit above gold line with tiny padding
+                const cLogoX = (pillX + pillW) - cLogoW; 
+                const cLogoY = goldY - cLogoH - (h * 0.005); 
 
                 c.save();
-                // Add subtle shadow for pop
                 c.shadowColor = "rgba(0,0,0,0.5)";
                 c.shadowBlur = 6;
                 c.shadowOffsetY = 2;
