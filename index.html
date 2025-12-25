@@ -118,7 +118,7 @@
             animation: none; 
         }
 
-        /* --- NEW ZOOM CONTROLS --- */
+        /* --- ZOOM CONTROLS --- */
         #zoom-container {
             position: absolute;
             right: 20px;
@@ -217,7 +217,8 @@
         </div>
         
         <video id="video-source" autoplay playsinline muted></video>
-        <video id="replay-source" playsinline muted></video> <canvas id="broadcast-canvas"></canvas>
+        <video id="replay-source" playsinline muted></video> 
+        <canvas id="broadcast-canvas"></canvas>
     </div>
 
     <div id="receiver-container">
@@ -258,21 +259,20 @@
         crickerrLogoImg.src = 'crickerrlogo.png';
 
         const video = document.getElementById('video-source');
-        const replayVideo = document.getElementById('replay-source'); // NEW
+        const replayVideo = document.getElementById('replay-source');
         const canvas = document.getElementById('broadcast-canvas');
         const ctx = canvas.getContext('2d');
         let recorder, chunks = [], isRecording = false;
 
-        // REPLAY VARIABLES (NEW)
+        // REPLAY VARIABLES
         let replayRecorder = null;
         let replayChunks = [];
-        let replayState = "LIVE"; // LIVE, TRANSITION_IN, PLAYING, TRANSITION_OUT
+        let replayState = "LIVE"; 
         let replayStartTime = 0;
-        let replayType = ""; // '4', '6', 'W'
+        let replayType = ""; 
         let transitionStartTime = 0;
-        const REPLAY_DURATION_SEC = 8; // Keep last 8 seconds
-        const TRANSITION_DURATION = 800; // ms
-
+        let replayBlobUrl = null;
+        
         // ZOOM VARIABLES
         let currentStream = null; 
         let videoTrack = null;
@@ -285,14 +285,10 @@
         // --- INITIALIZATION ---
         window.onload = function() {
             const params = new URLSearchParams(window.location.search);
-            
-            // CHECK: IS THIS OBS? (Receiver Mode)
             if(params.has('obs')) {
                 initReceiverMode(params.get('obs'));
-                return; // Stop normal camera loading
+                return;
             }
-
-            // Normal Camera Mode
             if(params.has('id')) { document.getElementById('match-id').value = params.get('id'); }
             window.addEventListener('resize', resizeCanvas);
             resizeCanvas();
@@ -314,7 +310,6 @@
             
             try { ['audio-four','audio-six','audio-wicket'].forEach(id => document.getElementById(id).load()); } catch(e){}
 
-            // Start with 1080p by default
             startCameraStream(1920, 1080);
             
             document.getElementById('setup-screen').style.display = 'none';
@@ -331,12 +326,7 @@
             }
 
             const constraints = {
-                video: { 
-                    facingMode: "environment", 
-                    width: { ideal: width }, 
-                    height: { ideal: height },
-                    frameRate: { ideal: 60 } 
-                }, 
+                video: { facingMode: "environment", width: { ideal: width }, height: { ideal: height }, frameRate: { ideal: 60 } }, 
                 audio: true 
             };
 
@@ -347,10 +337,8 @@
                 video.muted = true;
                 video.play().catch(e => console.error(e));
 
-                // START ROLLING BUFFER FOR REPLAY
                 startRollingReplayBuffer(stream);
 
-                // Update Quality Badge Text
                 const actualH = stream.getVideoTracks()[0].getSettings().height;
                 const label = actualH > 1080 ? "4K" : (actualH > 720 ? "1080p" : "720p");
                 document.getElementById('quality-badge').innerText = label;
@@ -364,14 +352,11 @@
             }
         }
 
-        // --- REPLAY BUFFER LOGIC (NEW) ---
+        // --- ROBUST REPLAY BUFFER ---
         function startRollingReplayBuffer(stream) {
-            // Check MIME Type support
             let mimeType = 'video/webm;codecs=vp9';
-            if (!MediaRecorder.isTypeSupported(mimeType)) {
-                mimeType = 'video/mp4'; 
-                if (!MediaRecorder.isTypeSupported(mimeType)) mimeType = ''; // Default
-            }
+            if (!MediaRecorder.isTypeSupported(mimeType)) mimeType = 'video/mp4'; 
+            if (!MediaRecorder.isTypeSupported(mimeType)) mimeType = ''; 
             
             try {
                 const options = mimeType ? { mimeType } : undefined;
@@ -380,42 +365,66 @@
                 replayRecorder.ondataavailable = (e) => {
                     if (e.data && e.data.size > 0) {
                         replayChunks.push(e.data);
-                        // Keep only last ~8-10 seconds (approx 8-10 chunks if 1s each)
-                        if(replayChunks.length > 10) {
+                        // Increase buffer to ~14-15 seconds (assuming 1s slices)
+                        if(replayChunks.length > 14) {
                             replayChunks.shift();
                         }
                     }
                 };
                 
-                // Record in 1-second slices to build rolling buffer
                 replayRecorder.start(1000); 
                 console.log("Replay buffer started");
             } catch (e) {
-                console.warn("Replay not supported on this device", e);
+                console.warn("Replay not supported", e);
             }
         }
 
         function triggerReplay(type) {
             if (replayChunks.length === 0) return;
             
-            console.log("Triggering Replay: " + type);
+            console.log("Preparing Replay: " + type);
             replayType = type;
+            
+            // CLEANUP PREVIOUS REPLAY TO PREVENT BLACK SCREEN
+            if (replayBlobUrl) {
+                URL.revokeObjectURL(replayBlobUrl);
+            }
+            
+            const blob = new Blob(replayChunks, { type: replayChunks[0].type });
+            replayBlobUrl = URL.createObjectURL(blob);
+            
+            replayVideo.src = replayBlobUrl;
+            replayVideo.playbackRate = 0.6; 
+            
+            // CRITICAL: Force video reload to ensure it plays
+            replayVideo.load();
+            
+            const playPromise = replayVideo.play();
+            if (playPromise !== undefined) {
+                playPromise.then(_ => {
+                    // Playback started
+                }).catch(error => {
+                    console.warn("Replay Auto-play prevent, forcing mute", error);
+                    replayVideo.muted = true;
+                    replayVideo.play();
+                });
+            }
+            
+            // Start sequence
             replayState = "TRANSITION_IN";
             transitionStartTime = Date.now();
-
-            // Compile Blob
-            const blob = new Blob(replayChunks, { type: replayChunks[0].type });
-            const url = URL.createObjectURL(blob);
-            replayVideo.src = url;
-            replayVideo.playbackRate = 0.6; // SLOW MOTION
-            
-            // Audio Trigger (Wait for video to start)
-            replayVideo.onloadeddata = () => {
-                // Audio is handled by separate elements in listenToDB
-            };
         }
 
-        // --- MENUS & NEW MATCH LOGIC ---
+        function cleanupReplay() {
+            // STOP & RESET VIDEO ELEMENT
+            replayVideo.pause();
+            replayVideo.src = ""; // Clear source
+            replayVideo.load();   // Force reset
+            
+            replayState = "LIVE";
+        }
+
+        // --- MENUS & LOGIC ---
         function toggleQualityMenu() {
             document.getElementById('settings-menu').style.display = 'none'; 
             const menu = document.getElementById('quality-menu');
@@ -443,26 +452,22 @@
 
         function setupZoom() {
             try {
-                if (videoTrack.getCapabilities) {
+                if (videoTrack.getCapabilities && 'zoom' in videoTrack.getCapabilities()) {
                     const capabilities = videoTrack.getCapabilities();
-                    if ('zoom' in capabilities) {
-                        zoomCapabilities = capabilities.zoom;
-                        const slider = document.getElementById('zoom-slider');
-                        const container = document.getElementById('zoom-container');
-                        slider.min = zoomCapabilities.min;
-                        slider.max = zoomCapabilities.max;
-                        slider.step = 0.1;
-                        slider.value = zoomCapabilities.min;
-                        container.style.display = 'flex';
-                    }
+                    const slider = document.getElementById('zoom-slider');
+                    const container = document.getElementById('zoom-container');
+                    slider.min = capabilities.zoom.min;
+                    slider.max = capabilities.zoom.max;
+                    slider.step = 0.1;
+                    slider.value = capabilities.zoom.min;
+                    container.style.display = 'flex';
                 }
-            } catch(err) { console.log("Zoom setup error", err); }
+            } catch(err) {}
         }
 
-        // --- ZOOM LOGIC ---
         function applyZoom(val) {
             if (!videoTrack) return;
-            videoTrack.applyConstraints({ advanced: [{ zoom: parseFloat(val) }] }).catch(err => console.log("Zoom error:", err));
+            videoTrack.applyConstraints({ advanced: [{ zoom: parseFloat(val) }] }).catch(err => console.log(err));
         }
 
         function stepZoom(direction) {
@@ -474,7 +479,7 @@
             applyZoom(newVal);
         }
 
-        // --- WIRELESS OBS LOGIC ---
+        // --- WIRELESS OBS ---
         function showObsModal() { document.getElementById('obs-modal').style.display = 'flex'; }
         function closeObsModal() { document.getElementById('obs-modal').style.display = 'none'; }
 
@@ -494,7 +499,7 @@
                     const audioTracks = video.srcObject.getAudioTracks();
                     if(audioTracks.length > 0) stream.addTrack(audioTracks[0]);
                 }
-                peer.on('call', (call) => { console.log("OBS Connected!"); call.answer(stream); });
+                peer.on('call', (call) => { call.answer(stream); });
             });
         }
 
@@ -519,7 +524,7 @@
             });
         }
 
-        // --- DATABASE LISTENER ---
+        // --- DATABASE & TRIGGER LOGIC ---
         function listenToDB(id) {
             db.collection("live_matches").doc(id).onSnapshot(doc => {
                 if(doc.exists) {
@@ -530,13 +535,16 @@
                     if (data.lastAction && data.lastAction.id !== lastActionId) { 
                         lastActionId = data.lastAction.id; 
                         
-                        // PLAY SOUND
+                        // 1. Play Sound Immediately
                         triggerAudio(data.lastAction.type);
 
-                        // TRIGGER REPLAY FOR BIG EVENTS
+                        // 2. Trigger Text Animation Immediately
+                        // handled in renderLoop via animType
+
+                        // 3. Trigger Replay AFTER 3.5 Seconds (Sequencing)
                         if(['4', '6', 'W'].includes(data.lastAction.type)) {
-                            // Delay slightly to capture the celebration/reaction in buffer
-                            setTimeout(() => triggerReplay(data.lastAction.type), 1500); 
+                            console.log("Scheduling Replay...");
+                            setTimeout(() => triggerReplay(data.lastAction.type), 3500); 
                         }
                     }
                 }
@@ -544,6 +552,7 @@
         }
 
         function triggerAudio(type) {
+            triggerAnim(type); // Set graphic variables
             const audioId = type === '4' ? 'audio-four' : type === '6' ? 'audio-six' : type === 'W' ? 'audio-wicket' : null;
             if (audioId) {
                 const audio = document.getElementById(audioId);
@@ -552,52 +561,48 @@
             }
         }
 
-        // --- MAIN RENDER LOOP ---
+        function triggerAnim(type) {
+            animType = type; 
+            animTime = Date.now();
+        }
+
+        // --- RENDER LOOP ---
         function renderLoop() {
             const w = window.innerWidth;
             const h = window.innerHeight;
             
             ctx.clearRect(0, 0, w, h);
             
-            // --- STATE MACHINE FOR RENDER ---
+            // --- REPLAY STATE MACHINE ---
             
             if (replayState === "LIVE") {
-                // 1. Draw Live Video
                 drawVideoObject(video, w, h);
-                // 2. Draw Live Graphics
                 drawLiveGraphics(w, h);
             
             } else if (replayState === "TRANSITION_IN") {
-                // Draw Live Video Background
                 drawVideoObject(video, w, h);
                 // Draw Stinger Animation
                 let finished = drawStinger(w, h, "IN");
                 if (finished) {
                     replayState = "PLAYING";
-                    replayVideo.play().catch(e => console.log("Replay play error", e));
                     replayStartTime = Date.now();
                 }
 
             } else if (replayState === "PLAYING") {
-                // Draw Replay Video
                 drawVideoObject(replayVideo, w, h);
-                // Draw Replay Overlay
                 drawReplayOverlay(w, h);
                 
-                // End Replay Logic
-                if (replayVideo.ended || (Date.now() - replayStartTime > 8000)) { // Max 8 sec replay
+                // End Replay after 12s or video end
+                if (replayVideo.ended || (Date.now() - replayStartTime > 12000)) { 
                     replayState = "TRANSITION_OUT";
                     transitionStartTime = Date.now();
                 }
 
             } else if (replayState === "TRANSITION_OUT") {
-                // Draw Live Video (so we reveal it)
                 drawVideoObject(video, w, h);
-                // Draw Stinger Animation
                 let finished = drawStinger(w, h, "OUT");
                 if (finished) {
-                    replayState = "LIVE";
-                    replayVideo.pause();
+                    cleanupReplay(); // Reset for next time
                 }
             }
             
@@ -618,98 +623,93 @@
             }
         }
 
-        // --- STINGER ANIMATION (Colorful Wipe) ---
+        // --- SMOOTH STINGER ANIMATION (1.5s) ---
         function drawStinger(w, h, direction) {
             const now = Date.now();
             const elapsed = now - transitionStartTime;
-            const duration = 600; // Fast wipe
+            const duration = 1500; 
             let progress = elapsed / duration;
             if (progress > 1) return true;
 
-            // Ease in/out
-            const ease = progress < 0.5 ? 2 * progress * progress : -1 + (4 - 2 * progress) * progress;
+            const ease = progress < 0.5 ? 4 * progress * progress * progress : 1 - Math.pow(-2 * progress + 2, 3) / 2;
             
-            // X position of the diagonal bar
             let xPos = (direction === "IN") ? (w * 1.5) - (w * 2.5 * ease) : (w * -1.5) + (w * 2.5 * ease);
             
             ctx.save();
             ctx.translate(xPos, 0);
-            
-            // Draw Angled Colour Bars
             const barW = w * 0.4;
-            const skew = -0.3; // Skew angle
-            
-            ctx.transform(1, 0, skew, 1, 0, 0); // Apply Skew
+            const skew = -0.3; 
+            ctx.transform(1, 0, skew, 1, 0, 0); 
 
-            // 1. Blue Bar
+            // Blue & Gold Bars
             ctx.fillStyle = "#3b82f6";
             ctx.fillRect(0, 0, barW, h);
-            
-            // 2. Gold Bar
             ctx.fillStyle = "#fbbf24";
             ctx.fillRect(barW * 0.3, 0, barW * 0.4, h);
 
-            // 3. Logo in Center of Stinger
+            // Center Logo
             if (crickerrLogoImg.complete) {
                 const ls = h * 0.4;
                 ctx.drawImage(crickerrLogoImg, (barW/2) - (ls/2), (h/2) - (ls/2), ls, ls);
             }
-
             ctx.restore();
             
-            // Full Screen Cover at peak
+            // Full Screen Cover at Peak
             if (progress > 0.4 && progress < 0.6) {
                 ctx.fillStyle = "#0f172a";
                 ctx.fillRect(0, 0, w, h);
-                // Draw centered logo
                 if (crickerrLogoImg.complete) {
                     const centerS = h * 0.5;
                     ctx.drawImage(crickerrLogoImg, (w-centerS)/2, (h-centerS)/2, centerS, centerS);
                 }
             }
-
             return false;
         }
 
-        // --- REPLAY OVERLAY ---
+        // --- REPLAY OVERLAY (Bottom Left) ---
         function drawReplayOverlay(w, h) {
-            // Top Left "ACTION REPLAY" Tag
             const labelText = (replayType === '6') ? "ACTION REPLAY • SIX RUNS" : (replayType === 'W' ? "ACTION REPLAY • WICKET" : "ACTION REPLAY");
             const color = (replayType === '6') ? "#22c55e" : (replayType === 'W' ? "#ef4444" : "#3b82f6");
 
+            // Calculate Position relative to Bottom Left Scoreboard Area
+            const barH = h * 0.095;
+            const bottomY = h - barH - (h * 0.03); 
+            const overlayY = bottomY - 60; // Just above scoreboard
+            const marginX = w * 0.03;
+            
             ctx.save();
-            // Blinking Red Dot
-            if (Math.floor(Date.now() / 500) % 2 === 0) {
-                ctx.fillStyle = color;
-                ctx.beginPath();
-                ctx.arc(40, 40, 10, 0, Math.PI * 2);
-                ctx.fill();
-            }
-
-            // Text Bg
-            ctx.fillStyle = "rgba(0,0,0,0.7)";
             ctx.font = "900 24px 'Roboto Condensed'";
             const textW = ctx.measureText(labelText).width;
             
+            // Box
+            ctx.fillStyle = "rgba(0,0,0,0.85)";
+            const boxH = 40;
+            const pad = 15;
+            
             ctx.beginPath();
-            ctx.moveTo(60, 20);
-            ctx.lineTo(60 + textW + 40, 20);
-            ctx.lineTo(60 + textW + 20, 60);
-            ctx.lineTo(60, 60);
+            ctx.moveTo(marginX, overlayY);
+            ctx.lineTo(marginX + textW + (pad*3), overlayY);
+            ctx.lineTo(marginX + textW + (pad*2), overlayY + boxH);
+            ctx.lineTo(marginX, overlayY + boxH);
             ctx.fill();
+
+            // Accent Line
+            ctx.fillStyle = color;
+            ctx.fillRect(marginX, overlayY, 5, boxH);
+
+            // Blinking Dot
+            if (Math.floor(Date.now() / 500) % 2 === 0) {
+                ctx.fillStyle = "white";
+                ctx.beginPath();
+                ctx.arc(marginX + 20, overlayY + (boxH/2), 6, 0, Math.PI * 2);
+                ctx.fill();
+            }
 
             // Text
             ctx.fillStyle = "white";
-            ctx.fillText(labelText, 75, 48);
+            ctx.textBaseline = "middle";
+            ctx.fillText(labelText, marginX + 35, overlayY + (boxH/2) + 2);
             
-            // Border
-            ctx.strokeStyle = color;
-            ctx.lineWidth = 3;
-            ctx.beginPath();
-            ctx.moveTo(60, 60);
-            ctx.lineTo(60 + textW + 20, 60);
-            ctx.stroke();
-
             ctx.restore();
         }
 
@@ -727,7 +727,7 @@
             }
         }
 
-        // --- GRAPHICS FUNCTIONS ---
+        // --- GRAPHICS HELPER FUNCTIONS ---
         function formatTeamName(name) { 
             if (!name) return "TEAM"; 
             let formatted = name.toUpperCase(); 
@@ -806,13 +806,11 @@
             const pillX = marginX;
             const isChasing = (match.target && match.target > 0);
             
-            // 1. Draw Gold Line
             c.fillStyle = "#fbbf24";
             const goldH = barH * 0.04; 
             const goldY = bottomY - goldH - 2;
             c.fillRect(pillX, goldY, pillW, goldH);
 
-            // 2. Draw Main Navy Background
             c.save(); 
             c.fillStyle = "#05081c"; 
             c.shadowColor = "rgba(0,0,0,0.5)"; c.shadowBlur = 10; 
@@ -821,24 +819,25 @@
             c.clip();
             c.restore();
             
-            // --- DRAW CRICKERR LOGO (UPDATED SIZE & POSITION) ---
+            // --- ENLARGED CRICKERR LOGO (1.35x Scale) ---
             if (crickerrLogoImg.complete && crickerrLogoImg.naturalHeight !== 0) {
-                const cLogoH = barH * 0.75; // INCREASED SIZE (was 0.55)
+                // Increased Scale from 1.2 to 1.35
+                const cLogoH = barH * 1.35; 
                 const aspectRatio = crickerrLogoImg.width / crickerrLogoImg.height;
                 const cLogoW = cLogoH * aspectRatio;
 
                 const cLogoX = (pillX + pillW) - cLogoW; 
-                const cLogoY = goldY - cLogoH - (h * 0.005); 
+                const cLogoY = goldY - cLogoH - 4; 
 
                 c.save();
                 c.shadowColor = "rgba(0,0,0,0.5)";
-                c.shadowBlur = 6;
-                c.shadowOffsetY = 2;
+                c.shadowBlur = 8;
+                c.shadowOffsetY = 4;
                 c.drawImage(crickerrLogoImg, cLogoX, cLogoY, cLogoW, cLogoH);
                 c.restore();
             }
 
-            // --- REST OF SCOREBOARD DRAWING ---
+            // --- REST OF SCOREBOARD ---
             let x1 = pillX;
             let x2 = pillX + (pillW * 0.19);
             let x3 = pillX + (pillW * 0.30);
@@ -1006,59 +1005,40 @@
             const txt = document.getElementById('rec-text');
             
             if(isRecording) {
-                // STOPPING: Update UI IMMEDIATELY to prevent freeze perception
+                recorder.stop();
                 isRecording = false;
                 btn.classList.remove('recording');
                 dot.style.borderRadius = "50%";
                 txt.innerText = "REC";
-                
-                // Stop recorder asynchronously to unblock UI
                 setTimeout(() => { if(recorder) recorder.stop(); }, 50);
-
             } else {
-                // STARTING
                 const stream = canvas.captureStream(60); 
-                if(video.srcObject) { 
-                    const audioTracks = video.srcObject.getAudioTracks(); 
-                    if(audioTracks.length > 0) stream.addTrack(audioTracks[0]); 
-                }
-                
-                // HIGH QUALITY SETTINGS (8 Mbps) & MP4 PREFERENCE
+                if(video.srcObject) { const audioTracks = video.srcObject.getAudioTracks(); if(audioTracks.length > 0) stream.addTrack(audioTracks[0]); }
                 let options = { mimeType: 'video/mp4;codecs=avc1', videoBitsPerSecond: 8000000 };
                 if(!MediaRecorder.isTypeSupported(options.mimeType)) {
                     options = { mimeType: 'video/webm;codecs=vp9', videoBitsPerSecond: 8000000 };
                     if(!MediaRecorder.isTypeSupported(options.mimeType)) {
-                        options = { videoBitsPerSecond: 8000000 }; // Fallback
+                        options = { videoBitsPerSecond: 8000000 }; 
                     }
                 }
-
-                try { 
-                    recorder = new MediaRecorder(stream, options); 
-                } catch(e) { 
-                    recorder = new MediaRecorder(stream); 
-                }
-
-                chunks = []; 
-                recorder.ondataavailable = e => { if(e.data.size) chunks.push(e.data); };
-                recorder.onstop = saveVideo; 
-                recorder.start();
-                
+                try { recorder = new MediaRecorder(stream, options); } catch(e) { recorder = new MediaRecorder(stream); }
+                chunks = []; recorder.ondataavailable = e => { if(e.data.size) chunks.push(e.data); };
+                recorder.onstop = saveVideo; recorder.start();
                 isRecording = true;
                 btn.classList.add('recording');
                 dot.style.borderRadius = "2px";
-                txt.innerText = "RECORDING"; // Updated Text
+                txt.innerText = "RECORDING";
             }
         }
 
         function saveVideo() {
-            // Process blob in timeout to unblock main thread
             setTimeout(() => {
-                const blob = new Blob(chunks, { type: 'video/mp4' }); // Force container label
+                const blob = new Blob(chunks, { type: 'video/mp4' });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a'); 
                 a.style.display = 'none'; 
                 a.href = url; 
-                a.download = `Match_Rec_${Date.now()}.mp4`; // Save as MP4
+                a.download = `Match_Rec_${Date.now()}.mp4`; 
                 document.body.appendChild(a); 
                 a.click(); 
                 setTimeout(() => { document.body.removeChild(a); window.URL.revokeObjectURL(url); }, 100);
