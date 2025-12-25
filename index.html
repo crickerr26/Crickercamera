@@ -278,22 +278,28 @@
                 video.srcObject = stream;
                 video.play();
                 
-                // --- SETUP ZOOM CAPABILITIES ---
+                // --- SETUP ZOOM CAPABILITIES (FIXED) ---
                 videoTrack = stream.getVideoTracks()[0];
-                const capabilities = videoTrack.getCapabilities();
                 
-                // Check for zoom support
-                if ('zoom' in capabilities) {
-                    zoomCapabilities = capabilities.zoom;
-                    const slider = document.getElementById('zoom-slider');
-                    const container = document.getElementById('zoom-container');
-                    
-                    slider.min = zoomCapabilities.min;
-                    slider.max = zoomCapabilities.max;
-                    slider.step = 0.1;
-                    slider.value = zoomCapabilities.min;
-                    
-                    container.style.display = 'flex'; // Show zoom UI
+                // FIXED: Wrapped in try-catch and checked for capabilities existence to prevent crashes on phones
+                try {
+                    if (videoTrack.getCapabilities) {
+                        const capabilities = videoTrack.getCapabilities();
+                        if ('zoom' in capabilities) {
+                            zoomCapabilities = capabilities.zoom;
+                            const slider = document.getElementById('zoom-slider');
+                            const container = document.getElementById('zoom-container');
+                            
+                            slider.min = zoomCapabilities.min;
+                            slider.max = zoomCapabilities.max;
+                            slider.step = 0.1;
+                            slider.value = zoomCapabilities.min;
+                            
+                            container.style.display = 'flex'; // Show zoom UI
+                        }
+                    }
+                } catch(err) {
+                    console.log("Zoom not supported or error in capabilities:", err);
                 }
 
                 document.getElementById('setup-screen').style.display = 'none';
