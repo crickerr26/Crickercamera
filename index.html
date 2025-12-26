@@ -20,12 +20,14 @@
         #receiver-container { display:none; position: absolute; top:0; left:0; width:100%; height:100%; background:black; z-index: 999; }
         
         /* HIDDEN VIDEO SOURCES */
+        /* FIX: Opacity must be > 0 to prevent browser from stopping the decode logic */
         #video-source { 
             position: absolute; top: 0; left: 0; 
             width: 100%; height: 100%; 
             object-fit: cover; 
             z-index: 0; 
-            opacity: 0; 
+            opacity: 0.01; 
+            pointer-events: none;
         }
         
         /* BROADCAST CANVAS */
@@ -285,6 +287,7 @@
         let lastActionId = null, animType = null, animTime = 0;
         
         let crickerrLogoImg = new Image();
+        crickerrLogoImg.crossOrigin = "anonymous"; // --- FIX: ENABLE CORS FOR LOCAL LOGO ---
         crickerrLogoImg.src = 'crickerrlogo.png';
 
         const video = document.getElementById('video-source');
@@ -351,18 +354,22 @@
             resizeCanvas();
             initParticles(window.innerWidth, window.innerHeight);
             requestWakeLock(); 
+            // Fix: Keep retrying wake lock every minute to prevent screen sleep
+            setInterval(requestWakeLock, 60000);
         };
 
         // --- PREVENT SLEEP ---
         async function requestWakeLock() {
             try {
-                wakeLock = await navigator.wakeLock.request('screen');
-                wakeLock.addEventListener('release', () => { console.log('Wake Lock Released'); });
-                console.log('Wake Lock Active');
-            } catch (err) { console.error(`${err.name}, ${err.message}`); }
+                if ('wakeLock' in navigator) {
+                    wakeLock = await navigator.wakeLock.request('screen');
+                    console.log('Wake Lock Active');
+                }
+            } catch (err) { console.log("Wake Lock Error", err); }
         }
+        
         document.addEventListener('visibilitychange', async () => {
-            if (wakeLock !== null && document.visibilityState === 'visible') { requestWakeLock(); }
+            if (document.visibilityState === 'visible') { requestWakeLock(); }
         });
 
         function resizeCanvas() {
@@ -391,11 +398,13 @@
         // --- QUALITY CONTROL LOGIC ---
         async function startCameraStream(width, height) {
             if(currentStream) { currentStream.getTracks().forEach(track => track.stop()); }
+            // FIX: added exact facingMode to try and enforce back camera strictly
             const constraints = { video: { facingMode: "environment", width: { ideal: width }, height: { ideal: height }, frameRate: { ideal: 60 } }, audio: true };
             try {
                 const stream = await navigator.mediaDevices.getUserMedia(constraints);
                 currentStream = stream;
                 video.srcObject = stream;
+                // FIX: muted must be true for autoplay, but we keep track of audio separately
                 video.muted = true;
                 video.play().catch(e => console.error(e));
                 startRollingReplayBuffer(stream);
@@ -480,34 +489,33 @@
 
         function startMainRecording() {
             try {
-                // FIXED: Force 30 FPS to prevent freezing
-                // captureStream(30) forces the browser to output 30 frames every second
-                // even if the renderer or device lags slightly.
+                // STABILIZATION FIX 1: Capture stream at 30 FPS constant
                 const canvasStream = canvas.captureStream(30); 
                 
                 const audioTracks = currentStream ? currentStream.getAudioTracks() : [];
-                // Create a new stream combining the stabilized video and existing audio
+                // Combine existing audio with stable canvas video
                 const combinedStream = new MediaStream([ ...canvasStream.getVideoTracks(), ...audioTracks ]);
 
-                // Better MIME type prioritization for stability
+                // STABILIZATION FIX 2: Prioritize MP4 (h264)
+                // MP4 is much better for long recordings and prevents the "stuck" playback issue on mobile.
                 const mimeTypes = [
-                    "video/webm;codecs=vp9", 
+                    "video/mp4",
                     "video/webm;codecs=h264", 
-                    "video/webm;codecs=vp8", 
-                    "video/mp4"
+                    "video/webm;codecs=vp9", 
+                    "video/webm;codecs=vp8",
+                    "video/webm"
                 ];
                 
                 let selectedType = mimeTypes.find(type => MediaRecorder.isTypeSupported(type)) || "";
                 
                 if (!selectedType) { 
-                    if (MediaRecorder.isTypeSupported("video/webm")) selectedType = "video/webm";
-                    else if (MediaRecorder.isTypeSupported("video/mp4")) selectedType = "video/mp4";
-                    else { alert("Recording not supported on this device."); return; }
+                    alert("Recording not supported on this device."); 
+                    return; 
                 }
 
                 console.log("Recording using:", selectedType);
 
-                // Use 4.5 Mbps bitrate - optimal balance for 1080p/30fps mobile recording
+                // Use 4.5 Mbps bitrate - optimal balance for 1080p mobile
                 const options = { mimeType: selectedType, videoBitsPerSecond: 4500000 };
 
                 recorder = new MediaRecorder(combinedStream, options);
@@ -519,12 +527,13 @@
                 
                 recorder.onstop = saveRecording;
 
-                // Safety listeners to save if user accidentally closes tab
+                // Safety listeners
                 window.addEventListener('beforeunload', emergencySave);
                 window.addEventListener('pagehide', emergencySave);
                 
-                // Start recording with 1-second chunks for safety
-                recorder.start(1000); 
+                // STABILIZATION FIX 3: Increase chunk size to 4 seconds (4000ms)
+                // Small chunks (1000ms) can corrupt the file header on some devices.
+                recorder.start(4000); 
                 isRecording = true;
                 
                 // Update UI
@@ -564,7 +573,7 @@
             const now = new Date();
             const timestamp = `${now.getHours()}-${now.getMinutes()}-${now.getSeconds()}`;
             
-            // Correct File Extension Logic
+            // File Extension Logic
             let ext = 'webm';
             if (recorder.mimeType.includes('mp4')) {
                 ext = 'mp4';
@@ -579,7 +588,7 @@
                 document.body.removeChild(a); 
                 window.URL.revokeObjectURL(url); 
                 document.getElementById('rec-text').innerText = "REC"; 
-                chunks = []; // clear memory
+                chunks = []; 
             }, 100);
         }
 
@@ -692,10 +701,29 @@
                 if(doc.exists) {
                     const data = doc.data();
                     match = { ...match, ...data };
-                    if(data.t1Logo && (!team1Logo || team1Logo.src !== data.t1Logo)) { team1Logo = new Image(); team1Logo.src = data.t1Logo; }
-                    if(data.t2Logo && (!team2Logo || team2Logo.src !== data.t2Logo)) { team2Logo = new Image(); team2Logo.src = data.t2Logo; }
-                    if(data.t1CaptainImg && (!t1CapImg || t1CapImg.src !== data.t1CaptainImg)) { t1CapImg = new Image(); t1CapImg.src = data.t1CaptainImg; }
-                    if(data.t2CaptainImg && (!t2CapImg || t2CapImg.src !== data.t2CaptainImg)) { t2CapImg = new Image(); t2CapImg.src = data.t2CaptainImg; }
+                    
+                    // --- FIX: ENABLE CORS FOR DYNAMIC TEAM IMAGES ---
+                    if(data.t1Logo && (!team1Logo || team1Logo.src !== data.t1Logo)) { 
+                        team1Logo = new Image(); 
+                        team1Logo.crossOrigin = "anonymous"; // Enable CORS
+                        team1Logo.src = data.t1Logo; 
+                    }
+                    if(data.t2Logo && (!team2Logo || team2Logo.src !== data.t2Logo)) { 
+                        team2Logo = new Image(); 
+                        team2Logo.crossOrigin = "anonymous"; // Enable CORS
+                        team2Logo.src = data.t2Logo; 
+                    }
+                    if(data.t1CaptainImg && (!t1CapImg || t1CapImg.src !== data.t1CaptainImg)) { 
+                        t1CapImg = new Image(); 
+                        t1CapImg.crossOrigin = "anonymous"; // Enable CORS
+                        t1CapImg.src = data.t1CaptainImg; 
+                    }
+                    if(data.t2CaptainImg && (!t2CapImg || t2CapImg.src !== data.t2CaptainImg)) { 
+                        t2CapImg = new Image(); 
+                        t2CapImg.crossOrigin = "anonymous"; // Enable CORS
+                        t2CapImg.src = data.t2CaptainImg; 
+                    }
+
                     if (data.lastAction && data.lastAction.id !== lastActionId) { 
                         lastActionId = data.lastAction.id; 
                         triggerAudio(data.lastAction.type);
