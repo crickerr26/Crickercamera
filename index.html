@@ -9,173 +9,43 @@
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     
-    <link href="https://fonts.googleapis.com/css2?family=Anton&family=Roboto:wght@400;500;700;900&family=Roboto+Condensed:wght@700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Anton&family=Montserrat:wght@400;600;800;900&family=Roboto:wght@400;500;700;900&family=Roboto+Condensed:wght@400;700&display=swap" rel="stylesheet">
     
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; -webkit-user-select: none; }
         body, html { width: 100%; height: 100%; overflow: hidden; background: #000; font-family: 'Roboto', sans-serif; }
-        
-        /* --- MAIN APP MODES --- */
         #app-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
         #receiver-container { display:none; position: absolute; top:0; left:0; width:100%; height:100%; background:black; z-index: 999; }
-        
-        /* HIDDEN VIDEO SOURCES */
-        #video-source { 
-            position: absolute; top: 0; left: 0; 
-            width: 100%; height: 100%; 
-            object-fit: cover; 
-            z-index: 0; 
-            opacity: 0; 
-        }
-        
-        /* BROADCAST CANVAS */
-        #broadcast-canvas { 
-            position: absolute; top: 0; left: 0; 
-            width: 100%; height: 100%; 
-            object-fit: cover; 
-            z-index: 2; 
-        }
-
-        /* HUD CONTROLS */
-        #controls-layer {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            z-index: 50; pointer-events: none;
-        }
+        #video-source { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; z-index: 0; opacity: 0; }
+        #broadcast-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; z-index: 2; }
+        #controls-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 50; pointer-events: none; }
         .hud-item { pointer-events: auto; }
-
-        /* GEAR BUTTON */
-        #gear-button {
-            position: absolute; top: 25px; left: 25px;
-            width: 45px; height: 45px;
-            background: rgba(0, 0, 0, 0.5);
-            border: 1px solid rgba(255, 255, 255, 0.3);
-            border-radius: 50%;
-            color: white; font-size: 24px;
-            display: flex; align-items: center; justify-content: center;
-            cursor: pointer; backdrop-filter: blur(8px);
-            transition: transform 0.3s ease, background 0.3s;
-            z-index: 100;
-        }
+        #gear-button { position: absolute; top: 25px; left: 25px; width: 45px; height: 45px; background: rgba(0, 0, 0, 0.5); border: 1px solid rgba(255, 255, 255, 0.3); border-radius: 50%; color: white; font-size: 24px; display: flex; align-items: center; justify-content: center; cursor: pointer; backdrop-filter: blur(8px); transition: transform 0.3s ease, background 0.3s; z-index: 100; }
         #gear-button:hover { background: rgba(0,0,0,0.8); transform: rotate(90deg); }
-
-        /* SETTINGS MENU */
-        #settings-menu {
-            display: none; position: absolute; top: 80px; left: 25px;
-            background: rgba(15, 23, 42, 0.95); border: 1px solid #333;
-            border-radius: 8px; z-index: 102; flex-direction: column;
-            backdrop-filter: blur(10px); min-width: 160px;
-        }
-        .s-option {
-            padding: 15px 20px; color: #ccc; cursor: pointer;
-            font-family: 'Roboto'; font-size: 14px; border-bottom: 1px solid rgba(255,255,255,0.1);
-            font-weight: bold;
-        }
+        #settings-menu { display: none; position: absolute; top: 80px; left: 25px; background: rgba(15, 23, 42, 0.95); border: 1px solid #333; border-radius: 8px; z-index: 102; flex-direction: column; backdrop-filter: blur(10px); min-width: 160px; }
+        .s-option { padding: 15px 20px; color: #ccc; cursor: pointer; font-family: 'Roboto'; font-size: 14px; border-bottom: 1px solid rgba(255,255,255,0.1); font-weight: bold; }
         .s-option:last-child { border-bottom: none; }
-        .s-option:hover { background: rgba(255,255,255,0.1); color: white; }
-
-        /* QUALITY INDICATOR & MENU */
-        #quality-badge {
-            position: absolute; top: 25px; left: 85px;
-            color: #888; /* Grey Letters */
-            font-weight: bold; font-family: 'Roboto Condensed'; font-size: 16px;
-            cursor: pointer; z-index: 100;
-            padding: 12px; background: rgba(0,0,0,0.4); border-radius: 8px;
-            backdrop-filter: blur(4px); border: 1px solid rgba(255,255,255,0.1);
-            transition: color 0.3s;
-        }
-        #quality-badge:hover { color: white; }
-
-        #quality-menu {
-            display: none; position: absolute; top: 80px; left: 85px;
-            background: rgba(15, 23, 42, 0.95); border: 1px solid #333;
-            border-radius: 8px; z-index: 101; flex-direction: column;
-            backdrop-filter: blur(10px); min-width: 120px;
-        }
-        .q-option {
-            padding: 12px 20px; color: #ccc; cursor: pointer;
-            font-family: 'Roboto'; font-size: 14px; border-bottom: 1px solid rgba(255,255,255,0.1);
-        }
+        #quality-badge { position: absolute; top: 25px; left: 85px; color: #888; font-weight: bold; font-family: 'Roboto Condensed'; font-size: 16px; cursor: pointer; z-index: 100; padding: 12px; background: rgba(0,0,0,0.4); border-radius: 8px; backdrop-filter: blur(4px); border: 1px solid rgba(255,255,255,0.1); transition: color 0.3s; }
+        #quality-menu { display: none; position: absolute; top: 80px; left: 85px; background: rgba(15, 23, 42, 0.95); border: 1px solid #333; border-radius: 8px; z-index: 101; flex-direction: column; backdrop-filter: blur(10px); min-width: 120px; }
+        .q-option { padding: 12px 20px; color: #ccc; cursor: pointer; font-family: 'Roboto'; font-size: 14px; border-bottom: 1px solid rgba(255,255,255,0.1); }
         .q-option:last-child { border-bottom: none; }
-        .q-option:hover { background: rgba(255,255,255,0.1); color: white; }
-
-        /* REC BUTTON */
-        #rec-button {
-            position: absolute; top: 25px; right: 25px;
-            background: rgba(0, 0, 0, 0.4); border: 1px solid rgba(255, 255, 255, 0.3);
-            padding: 8px 20px; border-radius: 50px; color: white;
-            font-size: 14px; font-weight: 700; letter-spacing: 1px;
-            display: flex; align-items: center; gap: 10px; cursor: pointer;
-            backdrop-filter: blur(8px); transition: all 0.2s;
-        }
-        
+        #rec-button { position: absolute; top: 25px; right: 25px; background: rgba(0, 0, 0, 0.4); border: 1px solid rgba(255, 255, 255, 0.3); padding: 8px 20px; border-radius: 50px; color: white; font-size: 14px; font-weight: 700; letter-spacing: 1px; display: flex; align-items: center; gap: 10px; cursor: pointer; backdrop-filter: blur(8px); transition: all 0.2s; }
         #rec-indicator { width: 12px; height: 12px; background: #ef4444; border-radius: 50%; transition: all 0.3s; }
-        
-        /* Recording Active State */
         .recording { background: rgba(220, 38, 38, 0.9) !important; border-color: #ef4444 !important; }
-        .recording #rec-indicator { 
-            background: white; 
-            border-radius: 2px; /* Square for Stop */
-            animation: none; 
-        }
-
-        /* --- ZOOM CONTROLS --- */
-        #zoom-container {
-            position: absolute;
-            right: 20px;
-            top: 50%;
-            transform: translateY(-50%);
-            height: 200px;
-            width: 50px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            background: rgba(0, 0, 0, 0.3);
-            border-radius: 25px;
-            backdrop-filter: blur(4px);
-            border: 1px solid rgba(255,255,255,0.1);
-            transition: opacity 0.3s;
-            display: none; 
-        }
-
-        /* Custom Range Slider Styling (Vertical) */
-        input[type=range][orient=vertical] {
-            writing-mode: bt-lr; /* IE */
-            -webkit-appearance: slider-vertical; /* WebKit */
-            width: 8px;
-            height: 140px;
-            padding: 0 5px;
-            background: transparent;
-            cursor: pointer;
-        }
-        
-        .zoom-btn {
-            color: white;
-            font-size: 18px;
-            font-weight: bold;
-            cursor: pointer;
-            padding: 10px;
-            opacity: 0.8;
-        }
-        .zoom-btn:active { transform: scale(0.9); opacity: 1; }
-
-        /* SETUP SCREEN */
+        .recording #rec-indicator { background: white; border-radius: 2px; }
+        #zoom-container { position: absolute; right: 20px; top: 50%; transform: translateY(-50%); height: 200px; width: 50px; display: none; flex-direction: column; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.3); border-radius: 25px; backdrop-filter: blur(4px); border: 1px solid rgba(255,255,255,0.1); transition: opacity 0.3s; }
+        input[type=range][orient=vertical] { writing-mode: bt-lr; -webkit-appearance: slider-vertical; width: 8px; height: 140px; padding: 0 5px; background: transparent; cursor: pointer; }
+        .zoom-btn { color: white; font-size: 18px; font-weight: bold; cursor: pointer; padding: 10px; opacity: 0.8; }
         #setup-screen { position: absolute; inset: 0; z-index: 60; background: radial-gradient(circle at center, #0f172a 0%, #000000 100%); display: flex; flex-direction: column; align-items: center; justify-content: center; }
         .input-field { background: rgba(255,255,255,0.05); border: 2px solid rgba(255,255,255,0.1); color: #fbbf24; font-size: 4rem; text-align: center; font-weight: 700; letter-spacing: 0.5rem; width: 320px; padding: 1rem; border-radius: 1rem; outline: none; transition: all 0.3s; font-family: 'Anton', sans-serif; margin-bottom: 2rem; }
         .start-btn { background: linear-gradient(135deg, #fbbf24 0%, #d97706 100%); color: #000; border: none; padding: 1rem 4rem; border-radius: 50px; font-size: 1.1rem; font-weight: 800; letter-spacing: 2px; cursor: pointer; box-shadow: 0 10px 30px rgba(251, 191, 36, 0.3); text-transform: uppercase; }
-        
-        /* MODALS */
         .help-modal { position: absolute; inset: 0; z-index: 70; background: rgba(0,0,0,0.9); backdrop-filter: blur(8px); display: flex; align-items: center; justify-content: center; }
         .modal-card { background: #1e1e1e; width: 90%; max-width: 500px; padding: 30px; border-radius: 20px; text-align: center; border: 1px solid #333; color: white; position: relative; }
-        
         .url-box { background: #000; color: #4ade80; font-family: 'Roboto Mono', monospace; padding: 15px; border-radius: 8px; word-break: break-all; margin: 15px 0; border: 1px solid #333; font-size: 0.9rem; }
-
-        /* RECEIVER VIDEO */
         #remote-video { width: 100%; height: 100%; object-fit: contain; }
     </style>
 </head>
 <body>
-
     <audio id="audio-four" src="four.mp3" preload="auto"></audio>
     <audio id="audio-six" src="six.mp3" preload="auto"></audio>
     <audio id="audio-wicket" src="wicket.mp3" preload="auto"></audio>
@@ -189,33 +59,27 @@
 
     <div id="app-container" style="display: none;">
         <div id="controls-layer">
-            
             <div id="gear-button" class="hud-item" onclick="toggleSettingsMenu()">⚙️</div>
-            
             <div id="settings-menu" class="hud-item">
                 <div class="s-option" onclick="showObsModal(); toggleSettingsMenu()">Wireless OBS Link</div>
                 <div class="s-option" onclick="changeMatchId()">New Match</div>
             </div>
-
             <div id="quality-badge" class="hud-item" onclick="toggleQualityMenu()">1080p</div>
             <div id="quality-menu" class="hud-item">
                 <div class="q-option" onclick="selectQuality(2160)">4K (UHD)</div>
                 <div class="q-option" onclick="selectQuality(1080)">1080p (FHD)</div>
                 <div class="q-option" onclick="selectQuality(720)">720p (HD)</div>
             </div>
-
             <div id="rec-button" class="hud-item" onclick="toggleRecording()">
                 <div id="rec-indicator"></div> 
                 <span id="rec-text">REC</span>
             </div>
-
             <div id="zoom-container" class="hud-item">
                 <div class="zoom-btn" onclick="stepZoom(1)">+</div>
                 <input type="range" id="zoom-slider" orient="vertical" min="1" max="10" step="0.1" value="1" oninput="applyZoom(this.value)">
                 <div class="zoom-btn" onclick="stepZoom(-1)">-</div>
             </div>
         </div>
-        
         <video id="video-source" autoplay playsinline muted></video>
         <canvas id="broadcast-canvas"></canvas>
     </div>
@@ -229,93 +93,63 @@
         <div class="modal-card">
             <h2 style="font-family: 'Anton'; font-size: 24px; margin-bottom: 15px; color: white;">WIRELESS OBS LINK</h2>
             <p style="margin-bottom:10px; color:#ccc;">Create a direct link to OBS.</p>
-            
-            <button onclick="startWirelessStream()" id="btn-start-stream" style="width:100%; padding:15px; margin-bottom:15px; background:#2563eb; color:white; border:none; border-radius:8px; font-weight:bold; cursor:pointer;">GENERATE CONNECTION CODE</button>
-
+            <button onclick="startWirelessStream()" id="btn-start-stream" style="width:100%; padding:15px; margin-bottom:15px; background:#2563eb; color:white; border:none; border-radius:8px; font-weight:bold; cursor:pointer;">GENERATE CODE</button>
             <div id="obs-instructions" style="display:none; text-align:left;">
                 <p style="color:#999; font-size:0.9rem;">Copy this URL into <b>OBS Browser Source</b>:</p>
                 <div id="obs-url-display" class="url-box">Generating...</div>
                 <button onclick="copyObsUrl()" style="width:100%; padding:10px; background:#333; color:white; border:none; border-radius:5px; font-weight:bold; cursor:pointer;">COPY URL</button>
             </div>
-
             <button onclick="closeObsModal()" style="width:100%; padding:12px; border-radius:8px; border:1px solid #444; background:transparent; color:#ccc; font-weight:bold; margin-top:15px; cursor:pointer;">CLOSE</button>
         </div>
     </div>
 
-<script>
-        // --- FIREBASE CONFIG ---
+    <script>
         const firebaseConfig = { apiKey: "AIzaSyBqcD59IAPpKqk98oDZkgzgkoVZ8b8LGgY", authDomain: "livecricketscoring-92087.firebaseapp.com", databaseURL: "https://livecricketscoring-92087-default-rtdb.firebaseio.com", projectId: "livecricketscoring-92087", storageBucket: "livecricketscoring-92087.firebasestorage.app", messagingSenderId: "522927197627", appId: "1:522927197627:web:f1df5db736cae96893089e" };
         if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore();
 
-        // --- GLOBAL STATE ---
         let match = { t1: "HOME", t2: "AWAY", score: 0, wickets: 0, overs: 0, balls: 0, striker: { name: "", runs: 0, balls: 0 }, nonStriker: { name: "", runs: 0, balls: 0 }, bowler: { name: "", wkts: 0, runs: 0, balls: 0 }, currentOver: [], target: 0, totalOvers: 20, matchStatus: "", winner: "", margin: "", pom: null, showDismissalCard: false, showSummaryOverlay: false };
-        let team1Logo = null, team2Logo = null;
-        let t1CapImg = null, t2CapImg = null; // ADDED CAPTAIN IMAGES
+        let team1Logo = null, team2Logo = null, t1CapImg = null, t2CapImg = null; 
         let lastActionId = null, animType = null, animTime = 0;
+        let crickerrLogoImg = new Image(); crickerrLogoImg.src = 'crickerrlogo.png';
         
-        // PRELOAD CRICKERR LOGO
-        let crickerrLogoImg = new Image();
-        crickerrLogoImg.src = 'crickerrlogo.png';
-
         const video = document.getElementById('video-source');
-        
-        // REPLAY VIDEO IS DYNAMIC
         let replayVideo = null; 
-        
         const canvas = document.getElementById('broadcast-canvas');
         const ctx = canvas.getContext('2d');
         let recorder, chunks = [], isRecording = false;
 
-        // --- REPLAY VARIABLES (FIXED) ---
-        let replayRecorder = null;
-        let replayChunks = [];
-        let replayHeader = null; // CRITICAL: STORES THE FILE HEADER
-        let replayState = "LIVE"; 
-        let replayStartTime = 0;
-        let replayType = ""; 
-        let transitionStartTime = 0;
-        let replayBlobUrl = null;
-        
-        // ZOOM VARIABLES
-        let currentStream = null; 
-        let videoTrack = null;
-        let zoomCapabilities = null;
+        let particles = [];
+        function initParticles(w, h) {
+            particles = [];
+            for(let i=0; i<60; i++) {
+                particles.push({ x: Math.random() * w, y: Math.random() * h, r: Math.random() * 2.5, d: Math.random() * Math.PI * 2, s: 0.2 + Math.random() * 0.5, alpha: 0.1 + Math.random() * 0.4 });
+            }
+        }
 
-        // --- PEER JS (Wireless) ---
-        let peer = null;
-        let myPeerId = null;
+        let replayRecorder = null, replayChunks = [], replayHeader = null, replayState = "LIVE", replayStartTime = 0, replayType = "", transitionStartTime = 0, replayBlobUrl = null;
+        let currentStream = null, videoTrack = null, currentCamId = null, currentQuality = '720'; 
+        let peer = null, myPeerId = null;
 
-        // --- INITIALIZATION ---
         window.onload = function() {
             const params = new URLSearchParams(window.location.search);
-            if(params.has('obs')) {
-                initReceiverMode(params.get('obs'));
-                return;
-            }
+            if(params.has('obs')) { initReceiverMode(params.get('obs')); return; }
             if(params.has('id')) { document.getElementById('match-id').value = params.get('id'); }
             window.addEventListener('resize', resizeCanvas);
             resizeCanvas();
+            initParticles(window.innerWidth, window.innerHeight);
         };
 
         function resizeCanvas() {
             const dpr = window.devicePixelRatio || 1;
-            canvas.width = window.innerWidth * dpr;
-            canvas.height = window.innerHeight * dpr;
-            ctx.scale(dpr, dpr);
-            canvas.style.width = window.innerWidth + 'px';
-            canvas.style.height = window.innerHeight + 'px';
+            canvas.width = window.innerWidth * dpr; canvas.height = window.innerHeight * dpr; ctx.scale(dpr, dpr); canvas.style.width = window.innerWidth + 'px'; canvas.style.height = window.innerHeight + 'px'; initParticles(window.innerWidth, window.innerHeight);
         }
 
-        // --- SMART CAMERA CONNECTION ---
         function connectToMatch() {
             const id = document.getElementById('match-id').value;
             if(!id) return alert("Please enter Match ID");
-            
             try { ['audio-four','audio-six','audio-wicket'].forEach(id => document.getElementById(id).load()); } catch(e){}
-
             startCameraStream(1920, 1080);
-            
             document.getElementById('setup-screen').style.display = 'none';
             document.getElementById('app-container').style.display = 'block';
             resizeCanvas();
@@ -323,998 +157,269 @@
             listenToDB(id);
         }
 
-        // --- QUALITY CONTROL LOGIC ---
         async function startCameraStream(width, height) {
-            if(currentStream) {
-                currentStream.getTracks().forEach(track => track.stop());
-            }
-
-            const constraints = {
-                video: { facingMode: "environment", width: { ideal: width }, height: { ideal: height }, frameRate: { ideal: 60 } }, 
-                audio: true 
-            };
-
+            if(currentStream) { currentStream.getTracks().forEach(track => track.stop()); }
+            const constraints = { video: { facingMode: "environment", width: { ideal: width }, height: { ideal: height }, frameRate: { ideal: 60 } }, audio: true };
             try {
                 const stream = await navigator.mediaDevices.getUserMedia(constraints);
-                currentStream = stream;
-                video.srcObject = stream;
-                video.muted = true;
-                video.play().catch(e => console.error(e));
-
+                currentStream = stream; video.srcObject = stream; video.muted = true; video.play().catch(e => console.error(e));
                 startRollingReplayBuffer(stream);
-
                 const actualH = stream.getVideoTracks()[0].getSettings().height;
                 const label = actualH > 1080 ? "4K" : (actualH > 720 ? "1080p" : "720p");
                 document.getElementById('quality-badge').innerText = label;
-
                 videoTrack = stream.getVideoTracks()[0];
                 setupZoom();
-
-            } catch(e) {
-                console.error("Camera failed:", e);
-                alert("Camera failed to start: " + e.message);
-            }
+            } catch(e) { alert("Camera failed to start: " + e.message); }
         }
 
-        // --- 1. ROBUST BUFFER (Mobile & Desktop Compatible) ---
         function startRollingReplayBuffer(stream) {
-            // A. Detect Mobile to lower bitrate (prevents crashes)
             const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-            const bitRate = isMobile ? 2500000 : 8000000; // 2.5Mbps (Mobile) vs 8Mbps (PC)
-
-            // B. Find the best supported MimeType
-            const types = [
-                "video/mp4", 
-                "video/mp4;codecs=avc1", 
-                "video/webm;codecs=h264", 
-                "video/webm;codecs=vp9", 
-                "video/webm"
-            ];
-
-            let selectedType = "";
-            for (const t of types) {
-                if (MediaRecorder.isTypeSupported(t)) {
-                    selectedType = t;
-                    break;
-                }
-            }
-
-            if (!selectedType) {
-                console.error("No supported recording format found on this device.");
-                return;
-            }
-
-            console.log(`Starting Replay Buffer. Type: ${selectedType}, Mobile: ${isMobile}`);
-
+            const bitRate = isMobile ? 2500000 : 8000000; 
+            const types = ["video/mp4", "video/mp4;codecs=avc1", "video/webm;codecs=h264", "video/webm;codecs=vp9", "video/webm"];
+            let selectedType = ""; for (const t of types) { if (MediaRecorder.isTypeSupported(t)) { selectedType = t; break; } }
+            if (!selectedType) return;
             try {
                 const options = { mimeType: selectedType, videoBitsPerSecond: bitRate };
                 replayRecorder = new MediaRecorder(stream, options);
-                
-                replayChunks = [];
-                replayHeader = null; 
-
+                replayChunks = []; replayHeader = null; 
                 replayRecorder.ondataavailable = (e) => {
                     if (e.data && e.data.size > 0) {
-                        // 1. Capture Header
-                        if (!replayHeader) {
-                            replayHeader = e.data;
-                        } else {
-                            // 2. Capture Body
-                            replayChunks.push(e.data);
-                        }
-
-                        // 3. Keep buffer tight (Mobile needs smaller buffer to save RAM)
-                        const maxChunks = isMobile ? 30 : 60; 
-                        if(replayChunks.length > maxChunks) { 
-                            replayChunks.shift();
-                        }
+                        if (!replayHeader) { replayHeader = e.data; } else { replayChunks.push(e.data); }
+                        const maxChunks = isMobile ? 30 : 60; if(replayChunks.length > maxChunks) { replayChunks.shift(); }
                     }
                 };
-                
-                // 400ms slices for smooth stitching
                 replayRecorder.start(400); 
-
-            } catch (e) {
-                console.warn("Replay Start Failed:", e);
-                alert("Replay feature not supported on this browser.");
-            }
+            } catch (e) {}
         }
 
-        // --- 2. ROBUST TRIGGER (Fixes "Black Screen" on Phone) ---
         function triggerReplay(type) {
-            if (!replayRecorder || !replayHeader) {
-                console.log("Replay failed: Recorder not ready");
-                return;
-            }
-            
-            console.log("Preparing Replay: " + type);
-            replayType = type;
-            
-            // 1. Force data flush
-            replayRecorder.requestData();
-
-            // 2. Pause Live Video
-            video.pause();
-
-            // 3. Cleanup Previous
-            if (replayVideo) {
-                if(replayBlobUrl) URL.revokeObjectURL(replayBlobUrl);
-                replayVideo.remove();
-                replayVideo = null;
-            }
-
-            // 4. Create Blob
+            if (!replayRecorder || !replayHeader) return;
+            replayType = type; replayRecorder.requestData(); video.pause();
+            if (replayVideo) { if(replayBlobUrl) URL.revokeObjectURL(replayBlobUrl); replayVideo.remove(); replayVideo = null; }
             const fullBlob = [replayHeader, ...replayChunks];
             const blob = new Blob(fullBlob, { type: replayHeader.type });
             replayBlobUrl = URL.createObjectURL(blob);
-
-            // 5. Create Video Element (WITH MOBILE ATTRIBUTES)
             replayVideo = document.createElement('video');
-            replayVideo.id = "replay-source";
-            replayVideo.muted = true; // Required for autoplay
-            replayVideo.playsInline = true; // REQUIRED FOR IPHONE
-            replayVideo.setAttribute('playsinline', ''); // Double check for iOS
-            replayVideo.setAttribute('webkit-playsinline', '');
-            
-            // Keep it technically visible but hidden, or iOS won't render it
+            replayVideo.id = "replay-source"; replayVideo.muted = true; replayVideo.playsInline = true; replayVideo.setAttribute('playsinline', '');
             replayVideo.style.cssText = "position:absolute; top:0; left:0; width:1px; height:1px; opacity:0.01; pointer-events:none;";
             document.body.appendChild(replayVideo);
-
-            replayVideo.src = replayBlobUrl;
-            replayVideo.playbackRate = 0.5; 
-
-            // 6. Robust Play Logic
+            replayVideo.src = replayBlobUrl; replayVideo.playbackRate = 0.5; 
             const playPromise = replayVideo.play();
-            
-            if (playPromise !== undefined) {
-                playPromise.then(() => {
-                    // Playback started successfully
-                    replayState = "TRANSITION_IN";
-                    transitionStartTime = Date.now();
-                }).catch(error => {
-                    console.log("Auto-play prevented:", error);
-                    // Fallback: If autoplay fails, just resume live video
-                    cleanupReplay();
-                });
-            }
-            
-            // Failsafe Timeout
-            replayVideo.onerror = () => { 
-                console.log("Video Load Error");
-                cleanupReplay(); 
-            };
+            if (playPromise !== undefined) { playPromise.then(() => { replayState = "TRANSITION_IN"; transitionStartTime = Date.now(); }).catch(error => cleanupReplay()); }
+            replayVideo.onerror = () => cleanupReplay(); 
         }
 
         function cleanupReplay() {
-            // KILL REPLAY VIDEO
-            if(replayVideo) {
-                replayVideo.pause();
-                replayVideo.src = "";
-                replayVideo.remove();
-                replayVideo = null;
-            }
-            if(replayBlobUrl) {
-                URL.revokeObjectURL(replayBlobUrl);
-                replayBlobUrl = null;
-            }
-            
-            // RESUME MAIN VIDEO
-            video.play().catch(e => console.log("Resume live video failed", e));
-            replayState = "LIVE";
-
-            // CRITICAL FIX: RESET RECORDER FOR NEXT BALL
-            // This prevents "stuck" buffers by starting fresh every time
-            if(replayRecorder && replayRecorder.state !== "inactive") {
-                replayRecorder.stop();
-                setTimeout(() => {
-                    replayChunks = [];
-                    replayHeader = null; // Clear header so we capture a new, fresh one
-                    replayRecorder.start(400);
-                    console.log("Replay Buffer Reset for Next Ball");
-                }, 100);
-            }
+            if(replayVideo) { replayVideo.pause(); replayVideo.src = ""; replayVideo.remove(); replayVideo = null; }
+            if(replayBlobUrl) { URL.revokeObjectURL(replayBlobUrl); replayBlobUrl = null; }
+            video.play().catch(e => {}); replayState = "LIVE";
+            if(replayRecorder && replayRecorder.state !== "inactive") { replayRecorder.stop(); setTimeout(() => { replayChunks = []; replayHeader = null; replayRecorder.start(400); }, 100); }
         }
 
-        // --- MENUS & LOGIC ---
-        function toggleQualityMenu() {
-            document.getElementById('settings-menu').style.display = 'none'; 
-            const menu = document.getElementById('quality-menu');
-            menu.style.display = menu.style.display === 'flex' ? 'none' : 'flex';
-        }
-
-        function toggleSettingsMenu() {
-            document.getElementById('quality-menu').style.display = 'none'; 
-            const menu = document.getElementById('settings-menu');
-            menu.style.display = menu.style.display === 'flex' ? 'none' : 'flex';
-        }
-
-        function changeMatchId() {
-            const newId = prompt("Enter New Match ID:");
-            if(newId && newId.trim() !== "") {
-                window.location.search = `?id=${newId.trim()}`; 
-            }
-        }
-
-        function selectQuality(height) {
-            document.getElementById('quality-menu').style.display = 'none';
-            let w = (height * 16) / 9;
-            startCameraStream(w, height);
-        }
-
-        function setupZoom() {
-            try {
-                if (videoTrack.getCapabilities && 'zoom' in videoTrack.getCapabilities()) {
-                    const capabilities = videoTrack.getCapabilities();
-                    const slider = document.getElementById('zoom-slider');
-                    const container = document.getElementById('zoom-container');
-                    slider.min = capabilities.zoom.min;
-                    slider.max = capabilities.zoom.max;
-                    slider.step = 0.1;
-                    slider.value = capabilities.zoom.min;
-                    container.style.display = 'flex';
-                }
-            } catch(err) {}
-        }
-
-        function applyZoom(val) {
-            if (!videoTrack) return;
-            videoTrack.applyConstraints({ advanced: [{ zoom: parseFloat(val) }] }).catch(err => console.log(err));
-        }
-
-        function stepZoom(direction) {
-            const slider = document.getElementById('zoom-slider');
-            let newVal = parseFloat(slider.value) + direction;
-            if(newVal > parseFloat(slider.max)) newVal = parseFloat(slider.max);
-            if(newVal < parseFloat(slider.min)) newVal = parseFloat(slider.min);
-            slider.value = newVal;
-            applyZoom(newVal);
-        }
-
-        // --- WIRELESS OBS ---
+        function toggleQualityMenu() { document.getElementById('settings-menu').style.display = 'none'; const menu = document.getElementById('quality-menu'); menu.style.display = menu.style.display === 'flex' ? 'none' : 'flex'; }
+        function toggleSettingsMenu() { document.getElementById('quality-menu').style.display = 'none'; const menu = document.getElementById('settings-menu'); menu.style.display = menu.style.display === 'flex' ? 'none' : 'flex'; }
+        function changeMatchId() { const newId = prompt("Enter New Match ID:"); if(newId && newId.trim() !== "") { window.location.search = `?id=${newId.trim()}`; } }
+        function selectQuality(height) { document.getElementById('quality-menu').style.display = 'none'; let w = (height * 16) / 9; startCameraStream(w, height); }
+        function setupZoom() { try { if (videoTrack.getCapabilities && 'zoom' in videoTrack.getCapabilities()) { const capabilities = videoTrack.getCapabilities(); const slider = document.getElementById('zoom-slider'); const container = document.getElementById('zoom-container'); slider.min = capabilities.zoom.min; slider.max = capabilities.zoom.max; slider.step = 0.1; slider.value = capabilities.zoom.min; container.style.display = 'flex'; } } catch(err) {} }
+        function applyZoom(val) { if (!videoTrack) return; videoTrack.applyConstraints({ advanced: [{ zoom: parseFloat(val) }] }).catch(err => {}); }
+        function stepZoom(direction) { const slider = document.getElementById('zoom-slider'); let newVal = parseFloat(slider.value) + direction; if(newVal > parseFloat(slider.max)) newVal = parseFloat(slider.max); if(newVal < parseFloat(slider.min)) newVal = parseFloat(slider.min); slider.value = newVal; applyZoom(newVal); }
         function showObsModal() { document.getElementById('obs-modal').style.display = 'flex'; }
         function closeObsModal() { document.getElementById('obs-modal').style.display = 'none'; }
+        function startWirelessStream() { if(peer) return; const code = Math.floor(1000 + Math.random() * 9000); myPeerId = "match-cam-" + code; peer = new Peer(myPeerId); peer.on('open', (id) => { const baseUrl = window.location.href.split('?')[0]; const fullUrl = `${baseUrl}?obs=${myPeerId}`; document.getElementById('btn-start-stream').style.display = 'none'; document.getElementById('obs-instructions').style.display = 'block'; document.getElementById('obs-url-display').innerText = fullUrl; const stream = canvas.captureStream(60); if(video.srcObject) { const audioTracks = video.srcObject.getAudioTracks(); if(audioTracks.length > 0) stream.addTrack(audioTracks[0]); } peer.on('call', (call) => { call.answer(stream); }); }); }
+        function copyObsUrl() { const txt = document.getElementById('obs-url-display').innerText; navigator.clipboard.writeText(txt).then(() => alert("URL Copied!")); }
+        function initReceiverMode(targetId) { document.getElementById('setup-screen').style.display = 'none'; document.getElementById('app-container').style.display = 'none'; document.getElementById('receiver-container').style.display = 'block'; const peer = new Peer(); peer.on('open', (id) => { const conn = peer.connect(targetId); const call = peer.call(targetId, new MediaStream()); call.on('stream', (remoteStream) => { const vid = document.getElementById('remote-video'); vid.srcObject = remoteStream; vid.play(); }); }); }
 
-        function startWirelessStream() {
-            if(peer) return; 
-            const code = Math.floor(1000 + Math.random() * 9000);
-            myPeerId = "match-cam-" + code;
-            peer = new Peer(myPeerId);
-            peer.on('open', (id) => {
-                const baseUrl = window.location.href.split('?')[0];
-                const fullUrl = `${baseUrl}?obs=${myPeerId}`;
-                document.getElementById('btn-start-stream').style.display = 'none';
-                document.getElementById('obs-instructions').style.display = 'block';
-                document.getElementById('obs-url-display').innerText = fullUrl;
-                const stream = canvas.captureStream(60);
-                if(video.srcObject) {
-                    const audioTracks = video.srcObject.getAudioTracks();
-                    if(audioTracks.length > 0) stream.addTrack(audioTracks[0]);
-                }
-                peer.on('call', (call) => { call.answer(stream); });
-            });
-        }
-
-        function copyObsUrl() {
-            const txt = document.getElementById('obs-url-display').innerText;
-            navigator.clipboard.writeText(txt).then(() => alert("URL Copied!"));
-        }
-
-        function initReceiverMode(targetId) {
-            document.getElementById('setup-screen').style.display = 'none';
-            document.getElementById('app-container').style.display = 'none';
-            document.getElementById('receiver-container').style.display = 'block';
-            const peer = new Peer(); 
-            peer.on('open', (id) => {
-                const conn = peer.connect(targetId);
-                const call = peer.call(targetId, new MediaStream());
-                call.on('stream', (remoteStream) => {
-                    const vid = document.getElementById('remote-video');
-                    vid.srcObject = remoteStream;
-                    vid.play();
-                });
-            });
-        }
-
-        // --- DATABASE & TRIGGER LOGIC ---
         function listenToDB(id) {
             db.collection("live_matches").doc(id).onSnapshot(doc => {
                 if(doc.exists) {
                     const data = doc.data();
                     match = { ...match, ...data };
-                    
-                    // 1. Load Team Logos
                     if(data.t1Logo && (!team1Logo || team1Logo.src !== data.t1Logo)) { team1Logo = new Image(); team1Logo.src = data.t1Logo; }
                     if(data.t2Logo && (!team2Logo || team2Logo.src !== data.t2Logo)) { team2Logo = new Image(); team2Logo.src = data.t2Logo; }
-
-                    // 2. NEW: Load Captain Images
                     if(data.t1CaptainImg && (!t1CapImg || t1CapImg.src !== data.t1CaptainImg)) { t1CapImg = new Image(); t1CapImg.src = data.t1CaptainImg; }
                     if(data.t2CaptainImg && (!t2CapImg || t2CapImg.src !== data.t2CaptainImg)) { t2CapImg = new Image(); t2CapImg.src = data.t2CaptainImg; }
-
-                    if (data.lastAction && data.lastAction.id !== lastActionId) { 
-                        lastActionId = data.lastAction.id; 
-                        
-                        // 1. Play Sound
-                        triggerAudio(data.lastAction.type);
-
-                        // 2. Schedule Replay AFTER 4 Seconds (Wait for text anim)
-                        if(['4', '6', 'W'].includes(data.lastAction.type)) {
-                            console.log("Scheduling Replay...");
-                            setTimeout(() => triggerReplay(data.lastAction.type), 4000); 
-                        }
-                    }
+                    if (data.lastAction && data.lastAction.id !== lastActionId) { lastActionId = data.lastAction.id; triggerAudio(data.lastAction.type); if(['4', '6', 'W'].includes(data.lastAction.type)) { setTimeout(() => triggerReplay(data.lastAction.type), 4000); } }
                 }
             });
         }
+        function triggerAudio(type) { triggerAnim(type); const audioId = type === '4' ? 'audio-four' : type === '6' ? 'audio-six' : type === 'W' ? 'audio-wicket' : null; if (audioId) { const audio = document.getElementById(audioId); audio.currentTime = 0; audio.play().catch(e => console.log("Audio autoplay blocked")); } }
+        function triggerAnim(type) { animType = type; animTime = Date.now(); }
 
-        function triggerAudio(type) {
-            triggerAnim(type); 
-            const audioId = type === '4' ? 'audio-four' : type === '6' ? 'audio-six' : type === 'W' ? 'audio-wicket' : null;
-            if (audioId) {
-                const audio = document.getElementById(audioId);
-                audio.currentTime = 0;
-                audio.play().catch(e => console.log("Audio autoplay blocked"));
-            }
-        }
-
-        function triggerAnim(type) {
-            animType = type; 
-            animTime = Date.now();
-        }
-
-        // --- RENDER LOOP ---
         function renderLoop() {
-            const w = window.innerWidth;
-            const h = window.innerHeight;
-            
-            ctx.clearRect(0, 0, w, h);
-            
-            // --- REPLAY STATE MACHINE ---
-            
-            if (replayState === "LIVE") {
-                drawVideoObject(video, w, h);
-                drawLiveGraphics(w, h);
-            
-            } else if (replayState === "TRANSITION_IN") {
-                drawVideoObject(video, w, h); // Draw live under transition
-                let finished = drawCoolStinger(w, h, "IN"); // FIXED STINGER
-                if (finished) {
-                    replayState = "PLAYING";
-                    if(replayVideo) replayVideo.play().catch(e => {});
-                    replayStartTime = Date.now();
-                }
-
-            } else if (replayState === "PLAYING") {
-                if(replayVideo) drawVideoObject(replayVideo, w, h);
-                drawReplayOverlay(w, h); // TEXT
-                
-                // Play for 15 seconds max OR until video ends
-                if ((replayVideo && replayVideo.ended) || (Date.now() - replayStartTime > 15000)) { 
-                    replayState = "TRANSITION_OUT";
-                    transitionStartTime = Date.now();
-                }
-
-            } else if (replayState === "TRANSITION_OUT") {
-                drawVideoObject(video, w, h); // Draw live under transition
-                let finished = drawCoolStinger(w, h, "OUT");
-                if (finished) {
-                    cleanupReplay(); // Reset for next time
-                }
-            }
-            
+            const w = window.innerWidth; const h = window.innerHeight; ctx.clearRect(0, 0, w, h);
+            if (replayState === "LIVE") { drawVideoObject(video, w, h); drawLiveGraphics(w, h); } 
+            else if (replayState === "TRANSITION_IN") { drawVideoObject(video, w, h); let finished = drawCoolStinger(w, h, "IN"); if (finished) { replayState = "PLAYING"; if(replayVideo) replayVideo.play().catch(e => {}); replayStartTime = Date.now(); } } 
+            else if (replayState === "PLAYING") { if(replayVideo) drawVideoObject(replayVideo, w, h); drawReplayOverlay(w, h); if ((replayVideo && replayVideo.ended) || (Date.now() - replayStartTime > 15000)) { replayState = "TRANSITION_OUT"; transitionStartTime = Date.now(); } } 
+            else if (replayState === "TRANSITION_OUT") { drawVideoObject(video, w, h); let finished = drawCoolStinger(w, h, "OUT"); if (finished) { cleanupReplay(); } }
             requestAnimationFrame(renderLoop);
         }
 
-        function drawVideoObject(vidObj, w, h) {
-            if (vidObj.readyState >= 2) {
-                const vidRatio = vidObj.videoWidth / vidObj.videoHeight;
-                const screenRatio = w / h;
-                let drawW, drawH, drawX, drawY;
-                if (screenRatio > vidRatio) {
-                    drawW = w; drawH = w / vidRatio; drawX = 0; drawY = (h - drawH) / 2;
-                } else {
-                    drawW = h * vidRatio; drawH = h; drawX = (w - drawW) / 2; drawY = 0;
-                }
-                ctx.drawImage(vidObj, drawX, drawY, drawW, drawH);
-            }
-        }
+        function drawVideoObject(vidObj, w, h) { if (vidObj.readyState >= 2) { const vidRatio = vidObj.videoWidth / vidObj.videoHeight; const screenRatio = w / h; let drawW, drawH, drawX, drawY; if (screenRatio > vidRatio) { drawW = w; drawH = w / vidRatio; drawX = 0; drawY = (h - drawH) / 2; } else { drawW = h * vidRatio; drawH = h; drawX = (w - drawW) / 2; drawY = 0; } ctx.drawImage(vidObj, drawX, drawY, drawW, drawH); } }
+        function drawParticles(c, w, h) { c.save(); particles.forEach(p => { p.y -= p.s; p.x += Math.sin(p.d) * 0.2; if(p.y < 0) p.y = h; p.d += 0.02; c.beginPath(); c.arc(p.x, p.y, p.r, 0, Math.PI*2); c.fillStyle = `rgba(255, 255, 255, ${p.alpha})`; c.fill(); }); c.restore(); }
+        function drawCoolStinger(w, h, direction) { const now = Date.now(); const elapsed = now - transitionStartTime; const duration = 2500; let p = elapsed / duration; if (p > 1) return true; ctx.save(); let coverAlpha = 0; if(p < 0.3) coverAlpha = p / 0.3; else if(p > 0.7) coverAlpha = (1 - p) / 0.3; else coverAlpha = 1; if (coverAlpha > 0) { ctx.fillStyle = `rgba(15, 23, 42, ${coverAlpha})`; ctx.fillRect(0,0,w,h); const offset = 0; ctx.fillStyle = "rgba(59, 130, 246, 0.6)"; ctx.fill(); if (coverAlpha > 0.8 && crickerrLogoImg.complete) { const ls = h * 0.4; const pulse = 1 + Math.sin(p * 10) * 0.05; const dW = ls * pulse; const dH = ls * pulse; ctx.shadowColor = "white"; ctx.shadowBlur = 20; ctx.drawImage(crickerrLogoImg, (w-dW)/2, (h-dH)/2, dW, dH); ctx.shadowBlur = 0; } } ctx.restore(); return false; }
 
-        // --- COOL STINGER ANIMATION ---
-        function drawCoolStinger(w, h, direction) {
-            const now = Date.now();
-            const elapsed = now - transitionStartTime;
-            const duration = 2500; // 2.5s Total
-            let p = elapsed / duration;
-            if (p > 1) return true;
-
-            // EaseInOutCubic
-            const ease = p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2;
-            
-            // IMPORTANT: Use restore() to undo transforms, NOT resetTransform()
-            ctx.save();
-            
-            // Calculate Cover Alpha (Hold Phase)
-            let coverAlpha = 0;
-            if(p < 0.3) coverAlpha = p / 0.3;        // Fade In
-            else if(p > 0.7) coverAlpha = (1 - p) / 0.3; // Fade Out
-            else coverAlpha = 1;                     // Hold
-
-            if (coverAlpha > 0) {
-                // Background
-                ctx.fillStyle = `rgba(15, 23, 42, ${coverAlpha})`; 
-                ctx.fillRect(0,0,w,h);
-                
-                // Moving Stripes
-                const offset = (ease * w * 1.5) - (w * 0.25);
-                
-                ctx.beginPath();
-                ctx.moveTo(offset, 0);
-                ctx.lineTo(offset + (w*0.2), 0);
-                ctx.lineTo(offset + (w*0.1), h);
-                ctx.lineTo(offset - (w*0.1), h);
-                ctx.fillStyle = "rgba(59, 130, 246, 0.6)"; // Blue
-                ctx.fill();
-
-                // Logo Pop in Center
-                if (coverAlpha > 0.8 && crickerrLogoImg.complete) {
-                    const ls = h * 0.4;
-                    const pulse = 1 + Math.sin(p * 10) * 0.05;
-                    const dW = ls * pulse;
-                    const dH = ls * pulse;
-                    
-                    ctx.shadowColor = "white";
-                    ctx.shadowBlur = 20;
-                    ctx.drawImage(crickerrLogoImg, (w-dW)/2, (h-dH)/2, dW, dH);
-                    ctx.shadowBlur = 0;
-                }
-            }
-
-            ctx.restore(); 
-            return false;
-        }
-
-        // --- 1. REPLACED DRAW FUNCTION (BROADCAST GRADE) ---
         function drawReplayOverlay(w, h) {
-            // --- CONFIGURATION ---
-            let text = "", subText = "", color1 = "", color2 = "", shape = "";
-            let textOffset = 0; // Optical correction for vertical centering
-
-            if (replayType === '6') {
-                text = "6"; subText = "MAXIMUM";
-                color1 = "#22c55e"; color2 = "#14532d"; // Emerald Greens
-                shape = "HEX";
-                textOffset = 0.05;
-            } else if (replayType === '4') {
-                text = "4"; subText = "BOUNDARY";
-                color1 = "#3b82f6"; color2 = "#172554"; // Royal Blues
-                shape = "CIRCLE";
-                textOffset = 0.05;
-            } else if (replayType === 'W') {
-                text = "OUT"; subText = "WICKET";
-                color1 = "#ef4444"; color2 = "#7f1d1d"; // Deep Reds
-                shape = "BOX";
-                textOffset = 0.02; // Text is smaller, needs less offset
-            } else {
-                text = "R"; subText = "REPLAY";
-                color1 = "#f59e0b"; color2 = "#78350f"; 
-                shape = "CIRCLE";
-                textOffset = 0.05;
-            }
-
-            // --- ANIMATION MATH ---
-            const now = Date.now();
-            const elapsed = now - replayStartTime;
-            
-            // 1. Entrance Delay (Wait for Stinger to finish)
-            const animDelay = 300; 
-            const animTime = Math.max(0, elapsed - animDelay);
-            
-            // 2. Scale Physics (Elastic Pop)
-            let progress = animTime / 600; 
-            let scale = getElasticScale(progress);
-            
-            // 3. Heartbeat Pulse (Continuous)
-            if (progress >= 1) scale = 1 + (Math.sin(now / 400) * 0.02);
-
-            // 4. Sheen Position (Sweeping light effect)
-            const sheenPos = (now % 2000) / 2000; // 0 to 1 every 2 seconds
-
-            // --- POSITIONING ---
-            const badgeSize = h * 0.16; // 16% of screen height
-            
-            // Calculate Top of Scoreboard (Yellow Line)
-            const barH = h * 0.095;
-            const bottomY = h - barH - (h * 0.03); 
-            const goldH = barH * 0.04;
-            const goldY = bottomY - goldH - 2; 
-
-            // Anchors
-            const posX = w * 0.09; 
-            // Sit exactly on top of the yellow line with slight padding
-            const posY = goldY - (badgeSize / 1.7); 
-
-            ctx.save();
-            ctx.translate(posX, posY);
-            ctx.scale(scale, scale);
-
-            // --- LAYER 1: DROP SHADOW (Heavy TV Shadow) ---
-            ctx.save();
-            ctx.shadowColor = "rgba(0,0,0,0.7)";
-            ctx.shadowBlur = 20;
-            ctx.shadowOffsetY = 10;
-            
-            // Draw Shape Base for Shadow
-            ctx.fillStyle = "black"; // Filler for shadow
-            drawBadgeShape(ctx, shape, badgeSize);
-            ctx.fill();
-            ctx.restore();
-
-            // --- LAYER 2: MAIN GRADIENT BODY ---
-            const grad = ctx.createLinearGradient(-badgeSize/2, -badgeSize/2, badgeSize/2, badgeSize/2);
-            grad.addColorStop(0, color1);
-            grad.addColorStop(1, color2);
-            ctx.fillStyle = grad;
-            
-            // Draw Shape Body
-            drawBadgeShape(ctx, shape, badgeSize);
-            ctx.fill();
-
-            // --- LAYER 3: GLOSSY SHEEN (THE PROFESSIONAL TOUCH) ---
-            ctx.save();
-            drawBadgeShape(ctx, shape, badgeSize);
-            ctx.clip(); // Mask everything inside the badge
-            
-            // Draw moving shine
-            const sheenX = (sheenPos * badgeSize * 3) - (badgeSize * 1.5);
-            const sheenW = badgeSize * 0.4;
-            
-            const sheenGrad = ctx.createLinearGradient(sheenX, -badgeSize, sheenX + sheenW, badgeSize);
-            sheenGrad.addColorStop(0, "rgba(255,255,255,0)");
-            sheenGrad.addColorStop(0.5, "rgba(255,255,255,0.4)"); // Center shine
-            sheenGrad.addColorStop(1, "rgba(255,255,255,0)");
-            
-            ctx.fillStyle = sheenGrad;
-            // Skewed rectangle for the shine
-            ctx.transform(1, 0, -0.5, 1, 0, 0); 
-            ctx.fillRect(sheenX - badgeSize, -badgeSize, sheenW * 2, badgeSize * 2);
-            ctx.restore();
-
-            // --- LAYER 4: BORDER STROKE ---
-            ctx.strokeStyle = "white";
-            ctx.lineWidth = 4;
-            drawBadgeShape(ctx, shape, badgeSize);
-            ctx.stroke();
-
-            // --- LAYER 5: TYPOGRAPHY ---
-            ctx.fillStyle = "white";
-            ctx.textAlign = "center";
-            ctx.textBaseline = "middle";
-            
-            // Main Text (6, 4, OUT)
-            const fontSize = text.length > 2 ? badgeSize * 0.45 : badgeSize * 0.85;
-            ctx.font = `900 ${fontSize}px 'Anton', sans-serif`;
-            
-            // Text Drop Shadow (Hard Edge)
-            ctx.shadowColor = "rgba(0,0,0,0.5)";
-            ctx.shadowBlur = 0;
-            ctx.shadowOffsetX = 3;
-            ctx.shadowOffsetY = 3;
-            
-            ctx.fillText(text, 0, badgeSize * textOffset);
-            
-            // Reset Shadow for Subtext
-            ctx.shadowColor = "transparent";
-
-            // --- LAYER 6: SUBTEXT PILL ---
-            const subY = badgeSize * 0.65;
-            const pillW = badgeSize * 1.3;
-            const pillH = badgeSize * 0.22;
-            
-            ctx.fillStyle = "#0f172a"; // Dark Slate
-            ctx.beginPath();
-            ctx.roundRect(-pillW/2, subY, pillW, pillH, 8);
-            ctx.fill();
-            
-            // Gold Border on Pill
-            ctx.strokeStyle = "#fbbf24";
-            ctx.lineWidth = 2;
-            ctx.stroke();
-
-            ctx.fillStyle = "#fbbf24"; // Gold Text
-            ctx.font = `700 ${badgeSize * 0.16}px 'Roboto Condensed'`;
-            // Optical center for pill text
-            ctx.fillText(subText, 0, subY + (pillH/2) + 1);
-
-            // --- LAYER 7: HEADER LABEL ---
-            ctx.fillStyle = "white";
-            ctx.font = `700 ${badgeSize * 0.14}px 'Roboto'`;
-            ctx.shadowColor = "black";
-            ctx.shadowBlur = 4;
-            ctx.fillText("ACTION REPLAY", 0, -badgeSize * 0.82);
-
-            ctx.restore();
+            let text = "", subText = "", color1 = "", color2 = "", shape = "", textOffset = 0;
+            if (replayType === '6') { text = "6"; subText = "MAXIMUM"; color1 = "#22c55e"; color2 = "#14532d"; shape = "HEX"; textOffset = 0.05; } 
+            else if (replayType === '4') { text = "4"; subText = "BOUNDARY"; color1 = "#3b82f6"; color2 = "#172554"; shape = "CIRCLE"; textOffset = 0.05; } 
+            else if (replayType === 'W') { text = "OUT"; subText = "WICKET"; color1 = "#ef4444"; color2 = "#7f1d1d"; shape = "BOX"; textOffset = 0.02; } 
+            else { text = "R"; subText = "REPLAY"; color1 = "#f59e0b"; color2 = "#78350f"; shape = "CIRCLE"; textOffset = 0.05; }
+            const now = Date.now(); const elapsed = now - replayStartTime; const animDelay = 300; const animTime = Math.max(0, elapsed - animDelay); let progress = animTime / 600; let scale = getElasticScale(progress); if (progress >= 1) scale = 1 + (Math.sin(now / 400) * 0.02);
+            const badgeSize = h * 0.16; const barH = h * 0.095; const bottomY = h - barH - (h * 0.03); const goldH = barH * 0.04; const goldY = bottomY - goldH - 2; const posX = w * 0.09; const posY = goldY - (badgeSize / 1.7);
+            ctx.save(); ctx.translate(posX, posY); ctx.scale(scale, scale); ctx.save(); ctx.shadowColor = "rgba(0,0,0,0.7)"; ctx.shadowBlur = 20; ctx.shadowOffsetY = 10; ctx.fillStyle = "black"; drawBadgeShape(ctx, shape, badgeSize); ctx.fill(); ctx.restore(); const grad = ctx.createLinearGradient(-badgeSize/2, -badgeSize/2, badgeSize/2, badgeSize/2); grad.addColorStop(0, color1); grad.addColorStop(1, color2); ctx.fillStyle = grad; drawBadgeShape(ctx, shape, badgeSize); ctx.fill(); ctx.strokeStyle = "white"; ctx.lineWidth = 4; drawBadgeShape(ctx, shape, badgeSize); ctx.stroke(); ctx.fillStyle = "white"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; const fontSize = text.length > 2 ? badgeSize * 0.45 : badgeSize * 0.85; ctx.font = `900 ${fontSize}px 'Anton', sans-serif`; ctx.fillText(text, 0, badgeSize * textOffset); const subY = badgeSize * 0.65; const pillW = badgeSize * 1.3; const pillH = badgeSize * 0.22; ctx.fillStyle = "#0f172a"; ctx.beginPath(); ctx.roundRect(-pillW/2, subY, pillW, pillH, 8); ctx.fill(); ctx.strokeStyle = "#fbbf24"; ctx.lineWidth = 2; ctx.stroke(); ctx.fillStyle = "#fbbf24"; ctx.font = `700 ${badgeSize * 0.16}px 'Roboto Condensed'`; ctx.fillText(subText, 0, subY + (pillH/2) + 1); ctx.restore();
         }
+        function drawBadgeShape(ctx, shape, size) { ctx.beginPath(); if (shape === 'HEX') { drawPolygon(ctx, 0, 0, size * 0.75, 6); } else if (shape === 'CIRCLE') { ctx.arc(0, 0, size * 0.70, 0, Math.PI * 2); } else if (shape === 'BOX') { const w = size * 0.8; const h = size * 0.5; const tilt = size * 0.1; ctx.moveTo(-w + tilt, -h); ctx.lineTo(w + tilt, -h); ctx.lineTo(w - tilt, h); ctx.lineTo(-w - tilt, h); ctx.closePath(); } }
+        function drawPolygon(ctx, x, y, radius, sides) { if (sides < 3) return; const a = (Math.PI * 2) / sides; const rotateOffset = sides === 6 ? Math.PI / 2 : 0; ctx.moveTo(x + radius * Math.cos(rotateOffset), y + radius * Math.sin(rotateOffset)); for (let i = 1; i < sides; i++) { ctx.lineTo(x + radius * Math.cos(a * i + rotateOffset), y + radius * Math.sin(a * i + rotateOffset)); } ctx.closePath(); }
+        function getElasticScale(t) { if (t <= 0) return 0; if (t >= 1) return 1; const p = 0.5; return Math.pow(2, -10 * t) * Math.sin((t - p / 4) * (2 * Math.PI) / p) + 1; }
 
-        // --- HELPER: CENTRALIZED SHAPE DRAWING ---
-        function drawBadgeShape(ctx, shape, size) {
-            ctx.beginPath();
-            if (shape === 'HEX') {
-                drawPolygon(ctx, 0, 0, size * 0.75, 6);
-            } else if (shape === 'CIRCLE') {
-                ctx.arc(0, 0, size * 0.70, 0, Math.PI * 2);
-            } else if (shape === 'BOX') {
-                // Slightly tilted aggressive box for "OUT"
-                const w = size * 0.8;
-                const h = size * 0.5;
-                const tilt = size * 0.1;
-                ctx.moveTo(-w + tilt, -h);
-                ctx.lineTo(w + tilt, -h);
-                ctx.lineTo(w - tilt, h);
-                ctx.lineTo(-w - tilt, h);
-                ctx.closePath();
-            }
-        }
-
-        // --- HELPER: POLYGON MATH ---
-        function drawPolygon(ctx, x, y, radius, sides) {
-            if (sides < 3) return;
-            const a = (Math.PI * 2) / sides;
-            // Rotate hexagon so point is at top
-            const rotateOffset = sides === 6 ? Math.PI / 2 : 0; 
-            
-            ctx.moveTo(x + radius * Math.cos(rotateOffset), y + radius * Math.sin(rotateOffset));
-            for (let i = 1; i < sides; i++) {
-                ctx.lineTo(x + radius * Math.cos(a * i + rotateOffset), y + radius * Math.sin(a * i + rotateOffset));
-            }
-            ctx.closePath();
-        }
-
-        // --- HELPER: ELASTIC PHYSICS ---
-        function getElasticScale(t) {
-            if (t <= 0) return 0;
-            if (t >= 1) return 1;
-            const p = 0.5;
-            return Math.pow(2, -10 * t) * Math.sin((t - p / 4) * (2 * Math.PI) / p) + 1;
-        }
-
-        // --- LIVE GRAPHICS ---
         function drawLiveGraphics(w, h) {
-            if (match.showDismissalCard === true && match.dismissalData) {
-                drawDismissalCard(ctx, w, h);
-            } 
+            if (match.showDismissalCard === true && match.dismissalData) { drawDismissalCard(ctx, w, h); } 
             else if (match.matchStatus === "COMPLETE" || match.showSummaryOverlay === true) {
-                drawProfessionalSummary(ctx, w, h);
-            } 
-            else {
-                drawNewLayout(ctx, w, h);
-                drawPopups(ctx, w, h);
-            }
+                if (match.summaryType === "SQUAD") { drawSquadBoard(ctx, w, h); } 
+                else if (match.summaryType === "MATCH_RESULT") { drawFinalResult(ctx, w, h); } 
+                else { drawProfessionalSummary(ctx, w, h); }
+            } else { drawNewLayout(ctx, w, h); drawPopups(ctx, w, h); }
         }
 
-        // --- GRAPHICS HELPER FUNCTIONS ---
-        function formatTeamName(name) { 
-            if (!name) return "TEAM"; 
-            let formatted = name.toUpperCase(); 
-            formatted = formatted.replace(/\bCRICKET CLUB\b/g, "C.C");
-            formatted = formatted.replace(/\bCRICKET\b/g, "C.C");
-            formatted = formatted.replace(/\bCC\b/g, "C.C");
-            return formatted; 
+        // --- SAFE STRING HELPER FOR CRASH PREVENTION ---
+        function safeStr(val) {
+            if (val === null || val === undefined) return "";
+            if (typeof val === 'string') return val;
+            return String(val);
         }
 
-        function formatPlayerName(fullName) { 
-            if (!fullName) return ""; 
-            const parts = fullName.trim().split(/\s+/);
-            if (parts.length > 1) {
-                return (parts[0] + " " + parts[1].charAt(0) + ".").toUpperCase();
-            }
-            return parts[0].toUpperCase(); 
+        function safeTeamName(t) {
+            if (typeof t === 'object' && t !== null && t.name) return safeStr(t.name);
+            if (typeof t === 'string') return t;
+            return "TEAM";
         }
 
-        function drawRoundRect(c, x, y, w, h, r) { if (w < 2 * r) r = w / 2; if (h < 2 * r) r = h / 2; c.beginPath(); c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r); c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath(); }
-        function drawLogo(c, name, img, x, y, s, isLeft) { c.save(); c.beginPath(); c.arc(x + s/2, y + s/2, s/2, 0, Math.PI*2); c.fillStyle = "white"; c.fill(); c.clip(); if(img) c.drawImage(img, x, y, s, s); else { c.fillStyle = "#334155"; c.fillRect(x, y, s, s); c.fillStyle = "white"; c.textAlign = "center"; c.textBaseline = "middle"; c.font = `bold ${s*0.5}px 'Roboto'`; c.fillText(name.substring(0,2), x+s/2, y+s/2); } c.restore(); }
-        
-        function fitText(c, text, x, y, maxWidth, initialFontSize, weight, fontFace) { 
-            let fontSize = initialFontSize; 
-            c.font = `${weight} ${fontSize}px '${fontFace}'`; 
-            let width = c.measureText(text).width; 
-            while (width > maxWidth && fontSize > (initialFontSize * 0.5)) { 
-                fontSize -= 2; 
-                c.font = `${weight} ${fontSize}px '${fontFace}'`; 
-                width = c.measureText(text).width; 
-            } 
-            c.fillText(text, x, y); 
-        }
+        // --- NEW DRAW MATCH RESULT DASHBOARD (FIXED) ---
+        function drawFinalResult(c, w, h) {
+            try {
+                // 1. BACKGROUND
+                const bgGrad = c.createLinearGradient(0, 0, w, h); bgGrad.addColorStop(0, "#2e1065"); bgGrad.addColorStop(1, "#1e1b4b"); c.fillStyle = bgGrad; c.fillRect(0, 0, w, h);
+                drawParticles(c, w, h);
 
-        function drawBallSquare(c, b, x, y, size) { 
-            let txt = b.toString(); 
-            let bgColor = "#ffffff"; 
-            let txtColor = "#000000"; 
+                // 2. HEADER
+                const titleY = h * 0.12; c.textAlign = "center"; c.shadowColor = "rgba(0,0,0,0.5)"; c.shadowBlur = 20; c.shadowOffsetY = 10;
+                c.fillStyle = "#fbbf24"; c.font = `700 ${h * 0.025}px 'Roboto'`; c.fillText("MATCH RESULT", w/2, h * 0.08); 
+                c.fillStyle = "#fef08a"; c.font = `900 ${h * 0.1}px 'Anton'`; c.fillText((match.resultMain || "MATCH COMPLETE").toUpperCase(), w/2, h * 0.18); 
 
-            if (txt === '4') { bgColor = "#0ea5e9"; txtColor = "white"; } 
-            else if (txt === '6') { bgColor = "#22c55e"; txtColor = "white"; } 
-            else if (txt.includes('W') && !txt.includes('WD')) { bgColor = "#dc2626"; txtColor = "white"; } 
-            else if (txt === '0' || txt === '•') { txt = "•"; bgColor = "white"; txtColor = "black"; } 
-            else { bgColor = "white"; txtColor = "black"; } 
+                const subY = h * 0.22; const subText = match.resultSub || "-"; c.font = `700 ${h * 0.03}px 'Roboto Condensed'`; const subW = c.measureText(subText).width + 60;
+                c.fillStyle = "rgba(255,255,255,0.1)"; drawRoundRect(c, (w-subW)/2, subY, subW, h*0.05, 20); c.fill(); c.strokeStyle = "rgba(255,255,255,0.2)"; c.lineWidth = 2; c.stroke();
+                c.fillStyle = "white"; c.textBaseline = "middle"; c.fillText(subText, w/2, subY + (h*0.025)); c.textBaseline = "alphabetic"; 
 
-            c.save();
-            c.fillStyle = bgColor;
-            c.fillRect(x, y, size, size);
+                // 3. TEAM SCORE CARDS
+                const cardY = h * 0.30; const cardH = h * 0.18; const cardW = w * 0.35; const cardGap = w * 0.04; const t1X = (w/2) - cardW - (cardGap/2); const t2X = (w/2) + (cardGap/2);
+                drawResultTeamCard(c, t1X, cardY, cardW, cardH, match.t1, team1Logo); drawResultTeamCard(c, t2X, cardY, cardW, cardH, match.t2, team2Logo);
 
-            if (txt === "•") { 
-                c.fillStyle = "black";
-                c.beginPath();
-                c.arc(x + size/2, y + size/2, size * 0.18, 0, Math.PI * 2);
-                c.fill();
-            } else { 
-                c.fillStyle = txtColor;
-                c.textAlign = "center";
-                c.textBaseline = "middle";
-                if (txt.includes('+') || txt.length > 2) {
-                     c.font = `900 ${size * 0.45}px 'Roboto Condensed'`; 
-                } else {
-                     c.font = `900 ${size * 0.7}px 'Roboto Condensed'`; 
+                // 4. STATS LISTS
+                const listY = cardY + cardH + (h * 0.04); const listH = h * 0.32; const listW = w * 0.28; const listGap = (w - (listW * 3)) / 4; 
+                const col1X = listGap; const col2X = listGap + listW + listGap; const col3X = listGap + (listW + listGap) * 2;
+                drawStatBox(c, col1X, listY, listW, listH, "TOP BATTERS", match.topBatters || [], "BAT");
+                drawStatBox(c, col2X, listY, listW, listH, "TOP BOWLERS", match.topBowlers || [], "BOWL");
+                drawPomBox(c, col3X, listY, listW, listH, match.pom);
+
+                // 5. FOOTER
+                const footerH = h * 0.08; const footerY = h - footerH; c.fillStyle = "rgba(0,0,0,0.6)"; c.fillRect(0, footerY, w, footerH); const contentY = footerY + (footerH/2);
+                let logoOffset = 0;
+                if (crickerrLogoImg.complete && crickerrLogoImg.naturalHeight > 0) {
+                    const logoH = footerH * 0.85; const ar = crickerrLogoImg.width / crickerrLogoImg.height; const logoW = logoH * ar; const logoX = w * 0.05;
+                    c.shadowColor = "rgba(0,0,0,0.5)"; c.shadowBlur = 10; c.drawImage(crickerrLogoImg, logoX, contentY - (logoH/2), logoW, logoH); logoOffset = logoW + 30;
                 }
-                c.fillText(txt, x + size/2, y + size/2 + (size * 0.05)); 
-            }
-            c.restore(); 
+                c.fillStyle = "white"; c.shadowColor = "black"; c.shadowBlur = 4; c.font = `700 ${h * 0.025}px 'Roboto Condensed'`; c.textAlign = "left"; c.textBaseline = "middle";
+                c.fillText("Thank you for watching! Contact +1 416 474 4994 (Inzi) to broadcast your match.", (w * 0.05) + logoOffset, contentY); c.textBaseline = "alphabetic";
+            } catch(e) { console.error("Draw Final Result Error:", e); }
         }
 
-        function drawPopups(c, w, h) { if (!animType) return; const now = Date.now(); if (now - animTime > 3000) { animType = null; return; } c.save(); const startX = w * 0.05; const startY = h - (h * 0.13) - (h * 0.06); c.translate(startX, startY); const t = (now - animTime) / 300; const scale = t < 1 ? (Math.sin(t * Math.PI/2) * 1.1) : 1.0; c.scale(scale, scale); c.textAlign = "left"; c.textBaseline = "bottom"; const fontSize = h * 0.08; c.font = `400 ${fontSize}px 'Anton'`; if (animType === '4') { c.fillStyle = "#3b82f6"; c.fillText("FOUR RUNS", 0, 0); } else if (animType === '6') { c.fillStyle = "#22c55e"; c.fillText("SIX RUNS", 0, 0); } else if (animType === 'W') { c.fillStyle = "#ef4444"; c.fillText("WICKET", 0, 0); } c.restore(); }
-
-        // --- MAIN RENDERER (New Layout) ---
-        function drawNewLayout(c, w, h) {
-            const barH = h * 0.095; 
-            const marginX = w * 0.03; 
-            const bottomY = h - barH - (h * 0.03); 
-            const pillW = w - (marginX * 2); 
-            const pillX = marginX;
-            const isChasing = (match.target && match.target > 0);
+        function drawResultTeamCard(c, x, y, w, h, data, img) {
+            c.save(); c.fillStyle = "rgba(255,255,255,0.1)"; drawRoundRect(c, x, y, w, h, 15); c.fill(); c.strokeStyle = "rgba(255,255,255,0.2)"; c.lineWidth = 2; c.stroke();
             
-            c.fillStyle = "#fbbf24";
-            const goldH = barH * 0.04; 
-            const goldY = bottomY - goldH - 2;
-            c.fillRect(pillX, goldY, pillW, goldH);
+            // Safety: Create a safe data object if data is null/string
+            let safeData = { name: "TEAM", score: "0/0", overs: "0.0" };
+            if (data && typeof data === 'object') safeData = data;
+            else if (typeof data === 'string') safeData.name = data;
 
-            c.save(); 
-            c.fillStyle = "#05081c"; 
-            c.shadowColor = "rgba(0,0,0,0.5)"; c.shadowBlur = 10; 
-            drawRoundRect(c, pillX, bottomY, pillW, barH, 16); 
-            c.fill();
-            c.clip();
+            const logoS = h * 0.7;
+            // Draw Logo with White Border
+            if (img && img.complete && img.naturalHeight !== 0) { drawLogo(c, safeStr(safeData.name), img, x + 20, y + (h-logoS)/2, logoS, true); } 
+            else { drawLogo(c, safeStr(safeData.name), null, x + 20, y + (h-logoS)/2, logoS, true); }
+            c.beginPath(); c.arc(x + 20 + logoS/2, y + (h-logoS)/2 + logoS/2, logoS/2 + 2, 0, Math.PI*2); c.lineWidth = 4; c.strokeStyle = "white"; c.stroke();
+
+            c.textAlign = "left"; c.fillStyle = "#94a3b8"; c.font = `700 ${h * 0.15}px 'Roboto Condensed'`; c.fillText(safeStr(safeData.name), x + 40 + logoS, y + h * 0.35);
+            c.fillStyle = "white"; c.font = `900 ${h * 0.4}px 'Anton'`; c.fillText(safeStr(safeData.score) || "0/0", x + 40 + logoS, y + h * 0.75);
+            c.textAlign = "right"; c.fillStyle = "#cbd5e1"; c.font = `500 ${h * 0.2}px 'Roboto'`; c.fillText((safeStr(safeData.overs) || "0.0") + " ov", x + w - 20, y + h * 0.55);
             c.restore();
-            
-            // --- ENLARGED CRICKERR LOGO (1.5x Scale) ---
-            if (crickerrLogoImg.complete && crickerrLogoImg.naturalHeight !== 0) {
-                const cLogoH = barH * 1.5; 
-                const aspectRatio = crickerrLogoImg.width / crickerrLogoImg.height;
-                const cLogoW = cLogoH * aspectRatio;
-
-                const cLogoX = (pillX + pillW) - cLogoW; 
-                const cLogoY = goldY - cLogoH - 4; 
-
-                c.save();
-                c.shadowColor = "rgba(0,0,0,0.5)";
-                c.shadowBlur = 8;
-                c.shadowOffsetY = 4;
-                c.drawImage(crickerrLogoImg, cLogoX, cLogoY, cLogoW, cLogoH);
-                c.restore();
-            }
-
-            // --- REST OF SCOREBOARD ---
-            let x1 = pillX;
-            let x2 = pillX + (pillW * 0.19);
-            let x3 = pillX + (pillW * 0.30);
-            let x4 = pillX + (pillW * 0.58);
-            let x5 = pillX + (pillW * 0.81);
-            let xToWinStart = 0;
-            let xToWinEnd = 0;
-            let bowlStart = x4;
-            let bowlEnd = x5;
-            if (isChasing) {
-                x2 = pillX + (pillW * 0.19);
-                x3 = pillX + (pillW * 0.30);
-                x4 = pillX + (pillW * 0.53); 
-                xToWinStart = x4;
-                xToWinEnd = pillX + (pillW * 0.63); 
-                bowlStart = xToWinEnd;
-                bowlEnd = pillX + (pillW * 0.81); 
-                x5 = bowlEnd;
-            }
-            const drawDiv = (x) => {
-                c.beginPath(); c.moveTo(x, bottomY + 5); c.lineTo(x, bottomY + barH - 5);
-                c.strokeStyle = "rgba(255,255,255,0.8)"; c.lineWidth = 1.5; c.stroke();
-            };
-            drawDiv(x2); drawDiv(x3); drawDiv(x4); 
-            if(isChasing) { drawDiv(xToWinEnd); drawDiv(bowlEnd); } else { drawDiv(x5); }
-            const xEnd = pillX + pillW;
-            const logoS = barH * 0.7;
-
-            // --- FIX: USE CAPTAIN IMAGE IF AVAILABLE, OTHERWISE TEAM LOGO ---
-            // If t1CapImg exists, use it. If not, use team1Logo.
-            const displayImg1 = (t1CapImg && t1CapImg.src) ? t1CapImg : team1Logo;
-            const displayImg2 = (t2CapImg && t2CapImg.src) ? t2CapImg : team2Logo;
-
-            drawLogo(c, match.t1, displayImg1, x1 + 15, bottomY + (barH - logoS)/2, logoS, true);
-            
-            c.fillStyle = "white"; c.textAlign = "left";
-            fitText(c, formatTeamName(match.t1), x1 + 25 + logoS, bottomY + barH * 0.45, (x2 - x1) - logoS - 35, barH * 0.35, '700', 'Roboto Condensed');
-            if (isChasing) {
-                c.fillStyle = "#fbbf24"; c.font = `900 ${barH * 0.25}px 'Roboto Condensed'`; 
-                c.fillText(`TARGET ${match.target}`, x1 + 25 + logoS, bottomY + barH * 0.75);
-            } else {
-                c.fillStyle = "#64748b"; c.font = `700 ${barH * 0.16}px 'Roboto'`;
-                c.fillText("BATTING", x1 + 25 + logoS, bottomY + barH * 0.70);
-            }
-            const scoreCenter = x2 + (x3 - x2)/2;
-            c.textAlign = "center";
-            c.fillStyle = "#fbbf24"; c.font = `900 ${barH * 0.55}px 'Anton'`;
-            c.fillText(`${match.score}/${match.wickets}`, scoreCenter, bottomY + barH * 0.60);
-            c.fillStyle = "white"; c.font = `700 ${barH * 0.18}px 'Apple SD Gothic Neo', 'Roboto'`; 
-            c.fillText(`OVERS ${match.overs}.${match.balls}`, scoreCenter, bottomY + barH * 0.85);
-            c.beginPath(); c.moveTo(x3 + 10, bottomY + barH/2); c.lineTo(x4 - 10, bottomY + barH/2);
-            c.strokeStyle = "rgba(255,255,255,0.4)"; c.lineWidth = 1; c.stroke(); 
-            const batPad = 20;
-            c.beginPath(); c.moveTo(x3 + 15, bottomY + barH * 0.25); c.lineTo(x3 + 22, bottomY + barH * 0.30); c.lineTo(x3 + 15, bottomY + barH * 0.35); c.fillStyle = "#fbbf24"; c.fill();
-            c.textAlign = "left"; c.fillStyle = "white"; c.font = `500 ${barH * 0.28}px 'Apple SD Gothic Neo', 'Roboto Condensed'`; 
-            c.fillText(match.striker.name ? formatPlayerName(match.striker.name) : "STRIKER", x3 + 30, bottomY + barH * 0.38);
-            c.textAlign = "right"; c.font = `900 ${barH * 0.35}px 'Roboto Condensed'`;
-            c.fillText(match.striker.runs||0, x4 - batPad - 40, bottomY + barH * 0.40);
-            c.font = `400 ${barH * 0.2}px 'Roboto'`; c.fillText(`(${match.striker.balls||0})`, x4 - batPad, bottomY + barH * 0.38);
-            c.textAlign = "left"; c.fillStyle = "white"; c.font = `500 ${barH * 0.28}px 'Apple SD Gothic Neo', 'Roboto Condensed'`;
-            c.fillText(match.nonStriker.name ? formatPlayerName(match.nonStriker.name) : "NON-STRIKER", x3 + 30, bottomY + barH * 0.88);
-            c.textAlign = "right"; c.font = `900 ${barH * 0.35}px 'Roboto Condensed'`;
-            c.fillText(match.nonStriker.runs||0, x4 - batPad - 40, bottomY + barH * 0.90);
-            c.font = `400 ${barH * 0.2}px 'Roboto'`; c.fillText(`(${match.nonStriker.balls||0})`, x4 - batPad, bottomY + barH * 0.88);
-            if (isChasing) {
-                const boxW = xToWinEnd - xToWinStart;
-                const runsNeeded = Math.max(0, match.target - match.score);
-                const totalBalls = match.totalOvers * 6;
-                const ballsBowled = (match.overs * 6) + match.balls;
-                const ballsRem = Math.max(0, totalBalls - ballsBowled);
-                const crr = ballsBowled > 0 ? (match.score / (ballsBowled/6)).toFixed(1) : "0.0";
-                const rrr = ballsRem > 0 ? (runsNeeded / (ballsRem/6)).toFixed(1) : "-";
-                c.save();
-                const winGrad = c.createLinearGradient(xToWinStart, bottomY, xToWinEnd, bottomY);
-                winGrad.addColorStop(0, "#1565c0"); winGrad.addColorStop(1, "#0d47a1");
-                c.fillStyle = winGrad; c.fillRect(xToWinStart, bottomY, boxW, barH);
-                const boxCenter = xToWinStart + boxW/2;
-                c.textAlign = "center";
-                c.fillStyle = "#dbeafe"; c.font = `700 ${barH * 0.16}px 'Roboto Condensed'`;
-                c.fillText("TO WIN", boxCenter, bottomY + barH * 0.20);
-                c.fillStyle = "white"; c.font = `900 ${barH * 0.52}px 'Anton'`; 
-                c.fillText(`${runsNeeded} - ${ballsRem}`, boxCenter, bottomY + barH * 0.71); 
-                c.fillStyle = "white"; c.font = `700 ${barH * 0.19}px 'Roboto Condensed'`; 
-                c.fillText(`RR: ${rrr}   CRR: ${crr}`, boxCenter, bottomY + barH * 0.92); 
-                c.restore();
-            }
-            c.beginPath(); c.moveTo(bowlStart + 10, bottomY + barH/2); c.lineTo(bowlEnd - 10, bottomY + barH/2);
-            c.strokeStyle = "rgba(255,255,255,0.4)"; c.lineWidth = 1; c.stroke();
-            const bowlPad = 20;
-            const bName = match.bowler.name ? formatPlayerName(match.bowler.name) : "BOWLER";
-            const bFigs = `${match.bowler.wkts || 0}-${match.bowler.runs || 0} (${match.bowler.balls ? (Math.floor(match.bowler.balls/6) + '.' + (match.bowler.balls%6)) : "0.0"})`;
-            c.textAlign = "right"; c.fillStyle = "white"; c.font = `700 ${barH * 0.30}px 'Roboto Condensed'`;
-            c.fillText(bName, bowlEnd - bowlPad, bottomY + barH * 0.38);
-            c.textAlign = "left"; c.fillStyle = "#cbd5e1"; c.font = `400 ${barH * 0.22}px 'Roboto'`;
-            c.fillText(bFigs, bowlStart + bowlPad, bottomY + barH * 0.38);
-            const balls = match.currentOver || [];
-            const ballGap = 5;
-            let ballSize = barH * 0.32;
-            const maxBallSectionW = (ballSize + ballGap) * 6;
-            if (balls.length > 6) { ballSize = (maxBallSectionW - (ballGap * (balls.length - 1))) / balls.length; }
-            const ballY = bottomY + barH * 0.58;
-            let ballX = bowlEnd - bowlPad - ballSize;
-            const ballsToDraw = [...balls].reverse(); 
-            ballsToDraw.forEach(b => { drawBallSquare(c, b, ballX, ballY, ballSize); ballX -= (ballSize + ballGap); });
-            const finalDiv = isChasing ? bowlEnd : x5; 
-            
-            // --- FIX: DRAW TEAM 2 CAPTAIN OR LOGO ---
-            drawLogo(c, match.t2, displayImg2, xEnd - 15 - logoS, bottomY + (barH - logoS)/2, logoS, false);
-
-            c.fillStyle = "white"; c.textAlign = "right";
-            fitText(c, formatTeamName(match.t2), xEnd - 25 - logoS, bottomY + barH * 0.45, (xEnd - finalDiv) - logoS - 35, barH * 0.35, '700', 'Roboto Condensed');
-            c.fillStyle = "#64748b"; c.font = `700 ${barH * 0.16}px 'Roboto'`;
-            c.fillText("BOWLING", xEnd - 25 - logoS, bottomY + barH * 0.70);
         }
 
-        // --- DRAW: PROFESSIONAL SUMMARY ---
-        function drawProfessionalSummary(c, w, h) {
-            const cardW = w * 0.82; const cardH = h * 0.72; const x = (w - cardW) / 2; const y = (h - cardH) / 2 + (h * 0.05);
-            const headerH = cardH * 0.18; const footerH = cardH * 0.13; const time = Date.now() * 0.0015;
-            c.save(); c.shadowColor = "rgba(0,0,0,0.8)"; c.shadowBlur = 60; c.shadowOffsetY = 20;
-            const bgGrad = c.createLinearGradient(x, y, x, y + cardH); bgGrad.addColorStop(0, "#020617"); bgGrad.addColorStop(1, "#1e1b4b");   
-            c.fillStyle = bgGrad; drawRoundRect(c, x, y, cardW, cardH, 20); c.fill();
-            const borderGrad = c.createLinearGradient(x, y, x + cardW, y + cardH); borderGrad.addColorStop(0, `hsl(${(time * 30) % 360}, 70%, 50%)`); borderGrad.addColorStop(0.5, "#22d3ee"); borderGrad.addColorStop(1, `hsl(${(time * 30 + 180) % 360}, 70%, 50%)`);
-            c.lineWidth = 4; c.strokeStyle = borderGrad; c.stroke(); c.shadowColor = "transparent";
-            const logoSize = headerH * 0.9; const logoX = x + 30; const logoY = y + (headerH - logoSize) / 2; 
-            c.save(); c.beginPath(); c.moveTo(x + 20, y); c.lineTo(x + cardW - 20, y); c.quadraticCurveTo(x + cardW, y, x + cardW, y + 20); c.lineTo(x + cardW, y + headerH); c.lineTo(x, y + headerH); c.lineTo(x, y + 20); c.quadraticCurveTo(x, y, x + 20, y); c.clip();
-            const hGrad = c.createLinearGradient(x, y, x, y + headerH); hGrad.addColorStop(0, "rgba(56, 189, 248, 0.2)"); hGrad.addColorStop(1, "rgba(56, 189, 248, 0.0)"); c.fillStyle = hGrad; c.fill();
-            c.beginPath(); c.moveTo(x, y+headerH); c.lineTo(x+cardW, y+headerH); c.strokeStyle = "rgba(255,255,255,0.15)"; c.lineWidth = 2; c.stroke(); c.restore();
-            drawLogo(c, match.t1, team1Logo, logoX, logoY, logoSize, true);
-            const textX = logoX + logoSize + 30; const maxTextW = cardW - (textX - x) - 40; 
-            c.textAlign = "left"; c.textBaseline = "alphabetic"; c.fillStyle = "white"; c.shadowColor = "rgba(0,0,0,0.8)"; c.shadowBlur = 4; c.shadowOffsetY = 2;
-            fitText(c, (match.t1 || "TEAM NAME").toUpperCase(), textX, y + headerH * 0.55, maxTextW, cardH * 0.08, '900', 'Roboto Condensed');
-            c.fillStyle = "#7dd3fc"; c.font = `700 ${cardH * 0.03}px 'Roboto'`; c.shadowBlur = 0; c.shadowOffsetY = 0; const subTitle = (match.summaryType === "BOWLING") ? "BOWLING CARD" : "ICC CHAMPIONS TROPHY"; c.fillText(subTitle, textX, y + headerH * 0.85);
-            const startY = y + headerH + (cardH * 0.05); c.fillStyle = "#94a3b8"; c.font = `bold ${cardH * 0.028}px 'Roboto'`; c.textAlign = "left";
-            let dataList = [];
-            if (match.summaryType === "BOWLING") {
-                const colX = { name: x + 40, o: x + cardW * 0.55, m: x + cardW * 0.65, r: x + cardW * 0.75, w: x + cardW * 0.85, e: x + cardW * 0.95 };
-                c.fillText("BOWLER", colX.name, startY); c.textAlign = "right"; c.fillText("O", colX.o, startY); c.fillText("M", colX.m, startY); c.fillText("R", colX.r, startY); c.fillText("W", colX.w, startY); c.fillText("ECON", colX.e, startY);
-                dataList = match.bowlingCard || []; renderRows(c, dataList, startY, cardW, cardH, x, colX, "BOWLING");
-            } else {
-                const colX = { name: x + 40, dismissal: x + cardW * 0.45, runs: x + cardW * 0.80, balls: x + cardW * 0.95 };
-                c.fillText("BATTER", colX.name, startY); c.fillText("DISMISSAL", colX.dismissal, startY); c.textAlign = "right"; c.fillText("RUNS", colX.runs, startY); c.fillText("BALLS", colX.balls, startY);
-                dataList = match.battingCard || []; renderRows(c, dataList, startY, cardW, cardH, x, colX, "BATTING");
-            }
-            const footerY = y + cardH - footerH; c.save(); c.beginPath(); c.moveTo(x, footerY); c.lineTo(x + cardW, footerY); c.lineTo(x + cardW, y + cardH - 20); c.quadraticCurveTo(x + cardW, y + cardH, x + cardW - 20, y + cardH); c.lineTo(x + 20, y + cardH); c.quadraticCurveTo(x, y + cardH, x, y + cardH - 20); c.closePath(); c.clip();
-            const fGrad = c.createLinearGradient(x, footerY, x, y + cardH); fGrad.addColorStop(0, "#f1f5f9"); fGrad.addColorStop(1, "#cbd5e1"); c.fillStyle = fGrad; c.fill(); c.restore();
-            const fTextY = footerY + (footerH * 0.65); c.fillStyle = "#0f172a"; c.textBaseline = "alphabetic"; c.textAlign = "left"; c.font = `bold ${cardH * 0.035}px 'Roboto'`; c.fillText("EXTRAS " + (match.extras || 0), x + 40, fTextY);
-            c.textAlign = "center"; c.fillText("OVERS " + match.overs + "." + match.balls, x + cardW/2, fTextY); c.textAlign = "right"; const scoreFont = `900 ${cardH * 0.075}px 'Roboto Condensed'`; const scoreText = match.score + "-" + match.wickets; c.font = scoreFont; const scoreWidth = c.measureText(scoreText).width; c.fillText(scoreText, x + cardW - 40, fTextY); c.font = `bold ${cardH * 0.035}px 'Roboto'`; c.fillText("TOTAL", x + cardW - 40 - scoreWidth - 20, fTextY); c.restore();
-        }
-
-        function renderRows(c, list, startY, cardW, cardH, x, colX, mode) {
-            let currentY = startY + (cardH * 0.04); const rowH = cardH * 0.09; c.save(); c.beginPath(); c.rect(x, currentY, cardW, cardH * 0.55); c.clip(); 
+        function drawStatBox(c, x, y, w, h, title, list, type) {
+            c.save(); c.fillStyle = "rgba(0,0,0,0.3)"; drawRoundRect(c, x, y, w, h, 15); c.fill(); c.strokeStyle = "rgba(255,255,255,0.1)"; c.lineWidth = 1; c.stroke();
+            c.fillStyle = "#fbbf24"; c.font = `900 ${h * 0.08}px 'Roboto Condensed'`; c.textAlign = "left"; c.fillText((type === "BAT" ? "🏏 " : "⚾ ") + title, x + 20, y + 40);
+            if(!list || !Array.isArray(list)) { c.restore(); return; }
+            let rowY = y + (h * 0.25); const rowH = (h * 0.7) / 3;
             list.forEach((p, i) => {
-                const rowY = currentY; const textY = rowY + (rowH * 0.65); let isActive = false; if (mode === "BATTING" && p.status.includes("NOT OUT")) isActive = true;
-                if (isActive) { const activeGrad = c.createLinearGradient(x, rowY, x + cardW, rowY); activeGrad.addColorStop(0, "#0ea5e9"); activeGrad.addColorStop(1, "#0284c7"); c.fillStyle = activeGrad; } else { c.fillStyle = (i % 2 === 0) ? "rgba(255,255,255,0.05)" : "transparent"; } c.fillRect(x, rowY, cardW, rowH);
-                c.fillStyle = isActive ? "white" : (mode === "BATTING" && !isActive ? "#94a3b8" : "white"); c.textAlign = "left"; c.font = `700 ${cardH * 0.045}px 'Roboto Condensed'`; c.fillText(p.name.toUpperCase(), colX.name, textY);
-                if (mode === "BOWLING") { c.textAlign = "right"; c.font = `500 ${cardH * 0.045}px 'Roboto'`; c.fillText(p.o, colX.o, textY); c.fillText(p.m, colX.m, textY); c.fillText(p.r, colX.r, textY); c.font = `900 ${cardH * 0.05}px 'Roboto'`; c.fillText(p.w, colX.w, textY); c.font = `500 ${cardH * 0.045}px 'Roboto'`; c.fillText(p.e, colX.e, textY); } 
-                else { c.font = `500 ${cardH * 0.03}px 'Roboto'`; if (isActive) { c.fillStyle = "rgba(255,255,255,0.9)"; c.fillText("NOT OUT", colX.dismissal, textY); } else { c.fillStyle = "#94a3b8"; c.fillText(p.status.toLowerCase(), colX.dismissal, textY); } c.textAlign = "right"; c.font = `900 ${cardH * 0.055}px 'Roboto'`; c.fillStyle = "white"; c.fillText(p.runs, colX.runs, textY); c.font = `500 ${cardH * 0.035}px 'Roboto'`; c.fillStyle = isActive ? "white" : "#94a3b8"; c.fillText(p.balls, colX.balls, textY); } currentY += rowH;
+                c.fillStyle = "white"; c.font = `700 ${h * 0.07}px 'Roboto'`; c.textAlign = "left"; c.fillText(safeStr(p.name), x + 20, rowY);
+                c.fillStyle = "#94a3b8"; c.font = `500 ${h * 0.05}px 'Roboto'`; c.fillText(safeStr(p.team), x + 20, rowY + 20);
+                c.textAlign = "right"; c.fillStyle = "#fbbf24"; c.font = `900 ${h * 0.08}px 'Roboto Condensed'`;
+                if (type === "BAT") { c.fillText(safeStr(p.runs), x + w - 20, rowY); c.fillStyle = "#64748b"; c.font = `500 ${h * 0.05}px 'Roboto'`; c.fillText(safeStr(p.balls) + " balls", x + w - 20, rowY + 20); } 
+                else { c.fillText(`${safeStr(p.wickets)}/${safeStr(p.runs)}`, x + w - 20, rowY); c.fillStyle = "#64748b"; c.font = `500 ${h * 0.05}px 'Roboto'`; c.fillText(safeStr(p.balls) + " balls", x + w - 20, rowY + 20); }
+                if (i < 2) { c.beginPath(); c.moveTo(x+20, rowY+35); c.lineTo(x+w-20, rowY+35); c.strokeStyle = "rgba(255,255,255,0.1)"; c.stroke(); } rowY += rowH;
             }); c.restore();
         }
 
-        // --- DRAW: DISMISSAL CARD ---
+        function drawPomBox(c, x, y, w, h, pom) {
+            c.save(); const bgGrad = c.createLinearGradient(x, y, x, y + h); bgGrad.addColorStop(0, "rgba(234, 179, 8, 0.2)"); bgGrad.addColorStop(1, "rgba(0,0,0,0.3)"); c.fillStyle = bgGrad; drawRoundRect(c, x, y, w, h, 15); c.fill(); c.strokeStyle = "rgba(234, 179, 8, 0.5)"; c.lineWidth = 2; c.stroke();
+            c.fillStyle = "#fbbf24"; c.font = `900 ${h * 0.08}px 'Roboto Condensed'`; c.textAlign = "left"; c.fillText("🏆 MAN OF THE MATCH", x + 20, y + 40);
+            if (pom) {
+                const midY = y + (h * 0.5); c.textAlign = "center"; c.fillStyle = "white"; c.font = `900 ${h * 0.15}px 'Anton'`; c.shadowColor = "black"; c.shadowBlur = 10; c.fillText(safeStr(pom.name).toUpperCase(), x + w/2, midY);
+                c.fillStyle = "#fbbf24"; c.shadowBlur = 0; c.font = `700 ${h * 0.07}px 'Roboto'`; c.fillText(safeStr(pom.stats), x + w/2, midY + 50);
+            } c.restore();
+        }
+
+        // --- GRAPHICS HELPERS ---
+        function formatTeamName(name) { if (!name) return "TEAM"; let formatted = String(name).toUpperCase(); formatted = formatted.replace(/\bCRICKET CLUB\b/g, "C.C").replace(/\bCRICKET\b/g, "C.C").replace(/\bCC\b/g, "C.C"); return formatted; }
+        function formatPlayerName(fullName) { if (!fullName) return ""; const parts = String(fullName).trim().split(/\s+/); if (parts.length > 1) { return (parts[0] + " " + parts[1].charAt(0) + ".").toUpperCase(); } return parts[0].toUpperCase(); }
+        function drawRoundRect(c, x, y, w, h, r) { if (w < 2 * r) r = w / 2; if (h < 2 * r) r = h / 2; c.beginPath(); c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r); c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath(); }
+        function drawLogo(c, name, img, x, y, s, isLeft) { c.save(); c.beginPath(); c.arc(x + s/2, y + s/2, s/2, 0, Math.PI*2); c.fillStyle = "white"; c.fill(); c.clip(); if(img) c.drawImage(img, x, y, s, s); else { c.fillStyle = "#334155"; c.fillRect(x, y, s, s); c.fillStyle = "white"; c.textAlign = "center"; c.textBaseline = "middle"; c.font = `bold ${s*0.5}px 'Roboto'`; c.fillText(safeStr(name).substring(0,2), x+s/2, y+s/2); } c.restore(); }
+        function fitText(c, text, x, y, maxWidth, initialFontSize, weight, fontFace) { let fontSize = initialFontSize; c.font = `${weight} ${fontSize}px '${fontFace}'`; let width = c.measureText(text).width; while (width > maxWidth && fontSize > (initialFontSize * 0.5)) { fontSize -= 2; c.font = `${weight} ${fontSize}px '${fontFace}'`; width = c.measureText(text).width; } c.fillText(text, x, y); }
+        function drawBallSquare(c, b, x, y, size) { let txt = String(b); let bgColor = "#ffffff"; let txtColor = "#000000"; if (txt === '4') { bgColor = "#0ea5e9"; txtColor = "white"; } else if (txt === '6') { bgColor = "#22c55e"; txtColor = "white"; } else if (txt.includes('W') && !txt.includes('WD')) { bgColor = "#dc2626"; txtColor = "white"; } else if (txt === '0' || txt === '•') { txt = "•"; bgColor = "white"; txtColor = "black"; } else { bgColor = "white"; txtColor = "black"; } c.save(); c.fillStyle = bgColor; c.fillRect(x, y, size, size); if (txt === "•") { c.fillStyle = "black"; c.beginPath(); c.arc(x + size/2, y + size/2, size * 0.18, 0, Math.PI * 2); c.fill(); } else { c.fillStyle = txtColor; c.textAlign = "center"; c.textBaseline = "middle"; if (txt.includes('+') || txt.length > 2) { c.font = `900 ${size * 0.45}px 'Roboto Condensed'`; } else { c.font = `900 ${size * 0.7}px 'Roboto Condensed'`; } c.fillText(txt, x + size/2, y + size/2 + (size * 0.05)); } c.restore(); }
+        function drawPopups(c, w, h) { if (!animType) return; const now = Date.now(); if (now - animTime > 3000) { animType = null; return; } c.save(); const startX = w * 0.05; const startY = h - (h * 0.13) - (h * 0.06); c.translate(startX, startY); const t = (now - animTime) / 300; const scale = t < 1 ? (Math.sin(t * Math.PI/2) * 1.1) : 1.0; c.scale(scale, scale); c.textAlign = "left"; c.textBaseline = "bottom"; const fontSize = h * 0.08; c.font = `400 ${fontSize}px 'Anton'`; if (animType === '4') { c.fillStyle = "#3b82f6"; c.fillText("FOUR RUNS", 0, 0); } else if (animType === '6') { c.fillStyle = "#22c55e"; c.fillText("SIX RUNS", 0, 0); } else if (animType === 'W') { c.fillStyle = "#ef4444"; c.fillText("WICKET", 0, 0); } c.restore(); }
+        function drawNewLayout(c, w, h) { const barH = h * 0.095; const marginX = w * 0.03; const bottomY = h - barH - (h * 0.03); const pillW = w - (marginX * 2); const pillX = marginX; const isChasing = (match.target && match.target > 0); c.fillStyle = "#fbbf24"; const goldH = barH * 0.04; const goldY = bottomY - goldH - 2; c.fillRect(pillX, goldY, pillW, goldH); c.save(); c.fillStyle = "#05081c"; c.shadowColor = "rgba(0,0,0,0.5)"; c.shadowBlur = 10; drawRoundRect(c, pillX, bottomY, pillW, barH, 16); c.fill(); c.clip(); c.restore(); if (crickerrLogoImg.complete && crickerrLogoImg.naturalHeight !== 0) { const cLogoH = barH * 1.5; const aspectRatio = crickerrLogoImg.width / crickerrLogoImg.height; const cLogoW = cLogoH * aspectRatio; const cLogoX = (pillX + pillW) - cLogoW; const cLogoY = goldY - cLogoH - 4; c.save(); c.shadowColor = "rgba(0,0,0,0.5)"; c.shadowBlur = 8; c.shadowOffsetY = 4; c.drawImage(crickerrLogoImg, cLogoX, cLogoY, cLogoW, cLogoH); c.restore(); } let x1 = pillX; let x2 = pillX + (pillW * 0.19); let x3 = pillX + (pillW * 0.30); let x4 = pillX + (pillW * 0.58); let x5 = pillX + (pillW * 0.81); let xToWinStart = 0; let xToWinEnd = 0; let bowlStart = x4; let bowlEnd = x5; if (isChasing) { x2 = pillX + (pillW * 0.19); x3 = pillX + (pillW * 0.30); x4 = pillX + (pillW * 0.53); xToWinStart = x4; xToWinEnd = pillX + (pillW * 0.63); bowlStart = xToWinEnd; bowlEnd = pillX + (pillW * 0.81); x5 = bowlEnd; } const drawDiv = (x) => { c.beginPath(); c.moveTo(x, bottomY + 5); c.lineTo(x, bottomY + barH - 5); c.strokeStyle = "rgba(255,255,255,0.8)"; c.lineWidth = 1.5; c.stroke(); }; drawDiv(x2); drawDiv(x3); drawDiv(x4); if(isChasing) { drawDiv(xToWinEnd); drawDiv(bowlEnd); } else { drawDiv(x5); } const xEnd = pillX + pillW; const logoS = barH * 0.7; const displayImg1 = (t1CapImg && t1CapImg.src) ? t1CapImg : team1Logo; const displayImg2 = (t2CapImg && t2CapImg.src) ? t2CapImg : team2Logo; drawLogo(c, match.t1, displayImg1, x1 + 15, bottomY + (barH - logoS)/2, logoS, true); c.fillStyle = "white"; c.textAlign = "left"; fitText(c, formatTeamName(match.t1), x1 + 25 + logoS, bottomY + barH * 0.45, (x2 - x1) - logoS - 35, barH * 0.35, '700', 'Roboto Condensed'); if (isChasing) { c.fillStyle = "#fbbf24"; c.font = `900 ${barH * 0.25}px 'Roboto Condensed'`; c.fillText(`TARGET ${match.target}`, x1 + 25 + logoS, bottomY + barH * 0.75); } else { c.fillStyle = "#64748b"; c.font = `700 ${barH * 0.16}px 'Roboto'`; c.fillText("BATTING", x1 + 25 + logoS, bottomY + barH * 0.70); } const scoreCenter = x2 + (x3 - x2)/2; c.textAlign = "center"; c.fillStyle = "#fbbf24"; c.font = `900 ${barH * 0.55}px 'Anton'`; c.fillText(`${match.score}/${match.wickets}`, scoreCenter, bottomY + barH * 0.60); c.fillStyle = "white"; c.font = `700 ${barH * 0.18}px 'Apple SD Gothic Neo', 'Roboto'`; c.fillText(`OVERS ${match.overs}.${match.balls}`, scoreCenter, bottomY + barH * 0.85); c.beginPath(); c.moveTo(x3 + 10, bottomY + barH/2); c.lineTo(x4 - 10, bottomY + barH/2); c.strokeStyle = "rgba(255,255,255,0.4)"; c.lineWidth = 1; c.stroke(); const batPad = 20; c.beginPath(); c.moveTo(x3 + 15, bottomY + barH * 0.25); c.lineTo(x3 + 22, bottomY + barH * 0.30); c.lineTo(x3 + 15, bottomY + barH * 0.35); c.fillStyle = "#fbbf24"; c.fill(); c.textAlign = "left"; c.fillStyle = "white"; c.font = `500 ${barH * 0.28}px 'Apple SD Gothic Neo', 'Roboto Condensed'`; c.fillText(match.striker.name ? formatPlayerName(match.striker.name) : "STRIKER", x3 + 30, bottomY + barH * 0.38); c.textAlign = "right"; c.font = `900 ${barH * 0.35}px 'Roboto Condensed'`; c.fillText(match.striker.runs||0, x4 - batPad - 40, bottomY + barH * 0.40); c.font = `400 ${barH * 0.2}px 'Roboto'`; c.fillText(`(${match.striker.balls||0})`, x4 - batPad, bottomY + barH * 0.38); c.textAlign = "left"; c.fillStyle = "white"; c.font = `500 ${barH * 0.28}px 'Apple SD Gothic Neo', 'Roboto Condensed'`; c.fillText(match.nonStriker.name ? formatPlayerName(match.nonStriker.name) : "NON-STRIKER", x3 + 30, bottomY + barH * 0.88); c.textAlign = "right"; c.font = `900 ${barH * 0.35}px 'Roboto Condensed'`; c.fillText(match.nonStriker.runs||0, x4 - batPad - 40, bottomY + barH * 0.90); c.font = `400 ${barH * 0.2}px 'Roboto'`; c.fillText(`(${match.nonStriker.balls||0})`, x4 - batPad, bottomY + barH * 0.88); if (isChasing) { const boxW = xToWinEnd - xToWinStart; const runsNeeded = Math.max(0, match.target - match.score); const totalBalls = match.totalOvers * 6; const ballsBowled = (match.overs * 6) + match.balls; const ballsRem = Math.max(0, totalBalls - ballsBowled); const crr = ballsBowled > 0 ? (match.score / (ballsBowled/6)).toFixed(1) : "0.0"; const rrr = ballsRem > 0 ? (runsNeeded / (ballsRem/6)).toFixed(1) : "-"; c.save(); const winGrad = c.createLinearGradient(xToWinStart, bottomY, xToWinEnd, bottomY); winGrad.addColorStop(0, "#1565c0"); winGrad.addColorStop(1, "#0d47a1"); c.fillStyle = winGrad; c.fillRect(xToWinStart, bottomY, boxW, barH); const boxCenter = xToWinStart + boxW/2; c.textAlign = "center"; c.fillStyle = "#dbeafe"; c.font = `700 ${barH * 0.16}px 'Roboto Condensed'`; c.fillText("TO WIN", boxCenter, bottomY + barH * 0.20); c.fillStyle = "white"; c.font = `900 ${barH * 0.52}px 'Anton'`; c.fillText(`${runsNeeded} - ${ballsRem}`, boxCenter, bottomY + barH * 0.71); c.fillStyle = "white"; c.font = `700 ${barH * 0.19}px 'Roboto Condensed'`; c.fillText(`RR: ${rrr}   CRR: ${crr}`, boxCenter, bottomY + barH * 0.92); c.restore(); } c.beginPath(); c.moveTo(bowlStart + 10, bottomY + barH/2); c.lineTo(bowlEnd - 10, bottomY + barH/2); c.strokeStyle = "rgba(255,255,255,0.4)"; c.lineWidth = 1; c.stroke(); const bowlPad = 20; const bName = match.bowler.name ? formatPlayerName(match.bowler.name) : "BOWLER"; const bFigs = `${match.bowler.wkts || 0}-${match.bowler.runs || 0} (${match.bowler.balls ? (Math.floor(match.bowler.balls/6) + '.' + (match.bowler.balls%6)) : "0.0"})`; c.textAlign = "right"; c.fillStyle = "white"; c.font = `700 ${barH * 0.30}px 'Roboto Condensed'`; c.fillText(bName, bowlEnd - bowlPad, bottomY + barH * 0.38); c.textAlign = "left"; c.fillStyle = "#cbd5e1"; c.font = `400 ${barH * 0.22}px 'Roboto'`; c.fillText(bFigs, bowlStart + bowlPad, bottomY + barH * 0.38); const balls = match.currentOver || []; const ballGap = 5; let ballSize = barH * 0.32; const maxBallSectionW = (ballSize + ballGap) * 6; if (balls.length > 6) { ballSize = (maxBallSectionW - (ballGap * (balls.length - 1))) / balls.length; } const ballY = bottomY + barH * 0.58; let ballX = bowlEnd - bowlPad - ballSize; const ballsToDraw = [...balls].reverse(); ballsToDraw.forEach(b => { drawBallSquare(c, b, ballX, ballY, ballSize); ballX -= (ballSize + ballGap); }); const finalDiv = isChasing ? bowlEnd : x5; drawLogo(c, match.t2, displayImg2, xEnd - 15 - logoS, bottomY + (barH - logoS)/2, logoS, false); c.fillStyle = "white"; c.textAlign = "right"; fitText(c, formatTeamName(match.t2), xEnd - 25 - logoS, bottomY + barH * 0.45, (xEnd - finalDiv) - logoS - 35, barH * 0.35, '700', 'Roboto Condensed'); c.fillStyle = "#64748b"; c.font = `700 ${barH * 0.16}px 'Roboto'`; c.fillText("BOWLING", xEnd - 25 - logoS, bottomY + barH * 0.70); }
+        function drawSquadBoard(c, w, h) { if (!match.squad1 || !match.squad2) return; const now = Date.now(); const animDuration = 800; let progress = (now - transitionStartTime) / animDuration; progress = Math.min(1, Math.max(0, progress)); const ease = 1 - Math.pow(1 - progress, 3); const cardW = w * 0.9; const cardH = h * 0.85; const cardX = (w - cardW) / 2; const finalY = (h - cardH) / 2; const currentY = h - ((h - finalY) * ease); c.save(); c.globalAlpha = ease; c.shadowColor = "rgba(0,0,0,0.8)"; c.shadowBlur = 50; c.shadowOffsetY = 20; const bgGrad = c.createLinearGradient(cardX, currentY, cardX + cardW, currentY + cardH); bgGrad.addColorStop(0, "#020617"); bgGrad.addColorStop(0.5, "#1e3a8a"); bgGrad.addColorStop(1, "#020617"); c.fillStyle = bgGrad; drawRoundRect(c, cardX, currentY, cardW, cardH, 20); c.fill(); const moveOffset = (now * 0.02) % 100; c.save(); c.clip(); c.shadowColor = "transparent"; c.strokeStyle = "rgba(255,255,255,0.03)"; c.lineWidth = 1; for(let i = -100; i < w + 100; i += 30) { c.beginPath(); c.moveTo(cardX + i + moveOffset, currentY); c.lineTo(cardX + i - 150 + moveOffset, currentY + cardH); c.stroke(); } c.restore(); const pulse = (Math.sin(now * 0.003) + 1) / 2; const borderGrad = c.createLinearGradient(cardX, currentY, cardX, currentY + cardH); borderGrad.addColorStop(0, `rgba(56, 189, 248, ${0.4 + (pulse * 0.2)})`); borderGrad.addColorStop(0.5, `rgba(234, 179, 8, ${0.4 + (pulse * 0.2)})`); borderGrad.addColorStop(1, `rgba(56, 189, 248, ${0.4 + (pulse * 0.2)})`); c.lineWidth = 3; c.strokeStyle = borderGrad; c.stroke(); const headerH = cardH * 0.20; const logoS = headerH * 0.8; const pad = 30; drawLogoWithBorder(c, team1Logo, cardX + pad, currentY + pad, logoS); c.textAlign = "left"; c.textBaseline = "middle"; c.fillStyle = "white"; c.font = `900 ${headerH * 0.3}px 'Montserrat'`; c.fillText(formatTeamName(match.t1), cardX + pad + logoS + 20, currentY + pad + (logoS*0.4)); c.fillStyle = "#38bdf8"; c.font = `700 ${headerH * 0.15}px 'Roboto Condensed'`; c.fillText("PLAYING TEAM", cardX + pad + logoS + 20, currentY + pad + (logoS*0.75)); drawLogoWithBorder(c, team2Logo, cardX + cardW - pad - logoS, currentY + pad, logoS); c.textAlign = "right"; c.fillStyle = "white"; c.font = `900 ${headerH * 0.3}px 'Montserrat'`; c.fillText(formatTeamName(match.t2), cardX + cardW - pad - logoS - 20, currentY + pad + (logoS*0.4)); c.fillStyle = "#38bdf8"; c.font = `700 ${headerH * 0.15}px 'Roboto Condensed'`; c.fillText("PLAYING TEAM", cardX + cardW - pad - logoS - 20, currentY + pad + (logoS*0.75)); const sepY = currentY + headerH; c.beginPath(); c.moveTo(cardX + 20, sepY); c.lineTo(cardX + cardW - 20, sepY); c.strokeStyle = "rgba(255,255,255,0.2)"; c.lineWidth = 2; c.stroke(); c.beginPath(); c.moveTo(cardX + cardW/2, sepY); c.lineTo(cardX + cardW/2, currentY + cardH - (cardH * 0.1)); c.stroke(); const listTopY = sepY + 20; const footerH = cardH * 0.08; const listHeight = (currentY + cardH - footerH) - listTopY - 10; const rowH = listHeight / 11; drawSimpleList(c, match.squad1, cardX + pad + 20, listTopY, rowH, "left", progress); drawSimpleList(c, match.squad2, cardX + cardW - pad - 20, listTopY, rowH, "right", progress); const footerY = currentY + cardH - footerH; c.fillStyle = "rgba(0, 0, 0, 0.4)"; c.beginPath(); c.moveTo(cardX, footerY); c.lineTo(cardX + cardW, footerY); c.lineTo(cardX + cardW, currentY + cardH - 20); c.quadraticCurveTo(cardX + cardW, currentY + cardH, cardX + cardW - 20, currentY + cardH); c.lineTo(cardX + 20, currentY + cardH); c.quadraticCurveTo(cardX, currentY + cardH, cardX, currentY + cardH - 20); c.fill(); c.textAlign = "center"; c.textBaseline = "middle"; c.fillStyle = "#fbbf24"; c.font = `800 ${footerH * 0.35}px 'Montserrat'`; let dateStr = "TODAY"; if (match.matchDate) { const d = new Date(match.matchDate); dateStr = d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }).toUpperCase(); } const venueStr = (match.venue || "VENUE").toUpperCase(); const formatStr = (match.playersPerSide ? `${match.playersPerSide}-A-SIDE` : "MATCH").toUpperCase(); c.fillText(`${venueStr}   •   ${dateStr}   •   ${formatStr}`, cardX + cardW/2, footerY + (footerH/2)); c.restore(); }
+        function drawLogoWithBorder(c, img, x, y, s) { c.save(); c.shadowColor = "black"; c.shadowBlur = 10; c.shadowOffsetY = 5; c.beginPath(); c.arc(x + s/2, y + s/2, s/2, 0, Math.PI*2); c.fillStyle = "white"; c.fill(); c.shadowColor = "transparent"; c.beginPath(); c.arc(x + s/2, y + s/2, (s/2)-4, 0, Math.PI*2); c.clip(); if(img && img.complete) c.drawImage(img, x, y, s, s); else { c.fillStyle = "#334155"; c.fillRect(x,y,s,s); } c.restore(); }
+        function drawSimpleList(c, squad, xPos, startY, rowH, align, progress) { c.textAlign = align; squad.forEach((name, i) => { const itemStart = 0.3 + (i * 0.05); let p = (progress - itemStart) / 0.15; p = Math.min(1, Math.max(0, p)); if (p > 0) { c.globalAlpha = p; const y = startY + (i * rowH) + (rowH/2); const xOff = (1 - p) * (align === 'left' ? -20 : 20); c.font = `700 ${rowH * 0.55}px 'Montserrat'`; c.fillStyle = "white"; c.fillText(name.toUpperCase(), xPos + xOff, y); } }); c.globalAlpha = 1; }
+        
+        function drawProfessionalSummary(c, w, h) {
+            const cardW = w * 0.82; const cardH = h * 0.72; const x = (w - cardW) / 2; const y = (h - cardH) / 2 + (h * 0.05); const headerH = cardH * 0.18; const footerH = cardH * 0.13; const time = Date.now() * 0.0015;
+            c.save(); c.shadowColor = "rgba(0,0,0,0.8)"; c.shadowBlur = 60; c.shadowOffsetY = 20; const bgGrad = c.createLinearGradient(x, y, x, y + cardH); bgGrad.addColorStop(0, "#020617"); bgGrad.addColorStop(1, "#1e1b4b"); c.fillStyle = bgGrad; drawRoundRect(c, x, y, cardW, cardH, 20); c.fill();
+            const borderGrad = c.createLinearGradient(x, y, x + cardW, y + cardH); borderGrad.addColorStop(0, `hsl(${(time * 30) % 360}, 70%, 50%)`); borderGrad.addColorStop(0.5, "#22d3ee"); borderGrad.addColorStop(1, `hsl(${(time * 30 + 180) % 360}, 70%, 50%)`); c.lineWidth = 4; c.strokeStyle = borderGrad; c.stroke(); c.shadowColor = "transparent";
+            const logoSize = headerH * 0.9; const logoX = x + 30; const logoY = y + (headerH - logoSize) / 2; c.save(); c.beginPath(); c.moveTo(x + 20, y); c.lineTo(x + cardW - 20, y); c.quadraticCurveTo(x + cardW, y, x + cardW, y + 20); c.lineTo(x + cardW, y + headerH); c.lineTo(x, y + headerH); c.lineTo(x, y + 20); c.quadraticCurveTo(x, y, x + 20, y); c.clip(); const hGrad = c.createLinearGradient(x, y, x, y + headerH); hGrad.addColorStop(0, "rgba(56, 189, 248, 0.2)"); hGrad.addColorStop(1, "rgba(56, 189, 248, 0.0)"); c.fillStyle = hGrad; c.fill(); c.beginPath(); c.moveTo(x, y+headerH); c.lineTo(x+cardW, y+headerH); c.strokeStyle = "rgba(255,255,255,0.15)"; c.lineWidth = 2; c.stroke(); c.restore();
+            drawLogo(c, safeTeamName(match.t1), team1Logo, logoX, logoY, logoSize, true); const textX = logoX + logoSize + 30; const maxTextW = cardW - (textX - x) - 40; c.textAlign = "left"; c.textBaseline = "alphabetic"; c.fillStyle = "white"; c.shadowColor = "rgba(0,0,0,0.8)"; c.shadowBlur = 4; c.shadowOffsetY = 2; fitText(c, (safeTeamName(match.t1) || "TEAM NAME").toUpperCase(), textX, y + headerH * 0.55, maxTextW, cardH * 0.08, '900', 'Roboto Condensed'); c.fillStyle = "#7dd3fc"; c.font = `700 ${cardH * 0.03}px 'Roboto'`; c.shadowBlur = 0; c.shadowOffsetY = 0; const subTitle = (match.summaryType === "BOWLING") ? "BOWLING CARD" : "ICC CHAMPIONS TROPHY"; c.fillText(subTitle, textX, y + headerH * 0.85);
+            const startY = y + headerH + (cardH * 0.05); c.fillStyle = "#94a3b8"; c.font = `bold ${cardH * 0.028}px 'Roboto'`; c.textAlign = "left"; let dataList = [];
+            if (match.summaryType === "BOWLING") { const colX = { name: x + 40, o: x + cardW * 0.55, m: x + cardW * 0.65, r: x + cardW * 0.75, w: x + cardW * 0.85, e: x + cardW * 0.95 }; c.fillText("BOWLER", colX.name, startY); c.textAlign = "right"; c.fillText("O", colX.o, startY); c.fillText("M", colX.m, startY); c.fillText("R", colX.r, startY); c.fillText("W", colX.w, startY); c.fillText("ECON", colX.e, startY); dataList = match.bowlingCard || []; renderRows(c, dataList, startY, cardW, cardH, x, colX, "BOWLING"); } 
+            else { const colX = { name: x + 40, dismissal: x + cardW * 0.45, runs: x + cardW * 0.80, balls: x + cardW * 0.95 }; c.fillText("BATTER", colX.name, startY); c.fillText("DISMISSAL", colX.dismissal, startY); c.textAlign = "right"; c.fillText("RUNS", colX.runs, startY); c.fillText("BALLS", colX.balls, startY); dataList = match.battingCard || []; renderRows(c, dataList, startY, cardW, cardH, x, colX, "BATTING"); }
+            const footerY = y + cardH - footerH; c.save(); c.beginPath(); c.moveTo(x, footerY); c.lineTo(x + cardW, footerY); c.lineTo(x + cardW, y + cardH - 20); c.quadraticCurveTo(x + cardW, y + cardH, x + cardW - 20, y + cardH); c.lineTo(x + 20, y + cardH); c.quadraticCurveTo(x, y + cardH, x, y + cardH - 20); c.closePath(); c.clip(); const fGrad = c.createLinearGradient(x, footerY, x, y + cardH); fGrad.addColorStop(0, "#f1f5f9"); fGrad.addColorStop(1, "#cbd5e1"); c.fillStyle = fGrad; c.fill(); c.restore(); const fTextY = footerY + (footerH * 0.65); c.fillStyle = "#0f172a"; c.textBaseline = "alphabetic"; c.textAlign = "left"; c.font = `bold ${cardH * 0.035}px 'Roboto'`; c.fillText("EXTRAS " + (match.extras || 0), x + 40, fTextY); c.textAlign = "center"; c.fillText("OVERS " + match.overs + "." + match.balls, x + cardW/2, fTextY); c.textAlign = "right"; const scoreFont = `900 ${cardH * 0.075}px 'Roboto Condensed'`; const scoreText = match.score + "-" + match.wickets; c.font = scoreFont; const scoreWidth = c.measureText(scoreText).width; c.fillText(scoreText, x + cardW - 40, fTextY); c.font = `bold ${cardH * 0.035}px 'Roboto'`; c.fillText("TOTAL", x + cardW - 40 - scoreWidth - 20, fTextY); c.restore();
+        }
+
+        function renderRows(c, list, startY, cardW, cardH, x, colX, mode) {
+            let currentY = startY + (cardH * 0.04); const rowH = cardH * 0.075; 
+            c.save(); c.beginPath(); c.rect(x, currentY, cardW, cardH * 0.62); c.clip(); 
+            list.forEach((p, i) => {
+                const rowY = currentY; const textY = rowY + (rowH * 0.65); let isActive = false; if (mode === "BATTING" && p.status.includes("NOT OUT")) isActive = true;
+                if (isActive) { const activeGrad = c.createLinearGradient(x, rowY, x + cardW, rowY); activeGrad.addColorStop(0, "#0ea5e9"); activeGrad.addColorStop(1, "#0284c7"); c.fillStyle = activeGrad; } else { c.fillStyle = (i % 2 === 0) ? "rgba(255,255,255,0.05)" : "transparent"; } c.fillRect(x, rowY, cardW, rowH);
+                c.fillStyle = isActive ? "white" : (mode === "BATTING" && !isActive ? "#94a3b8" : "white"); c.textAlign = "left"; c.font = `700 ${cardH * 0.045}px 'Roboto Condensed'`; c.fillText(safeStr(p.name).toUpperCase(), colX.name, textY);
+                if (mode === "BOWLING") { c.textAlign = "right"; c.font = `500 ${cardH * 0.045}px 'Roboto'`; c.fillText(safeStr(p.o), colX.o, textY); c.fillText(safeStr(p.m), colX.m, textY); c.fillText(safeStr(p.r), colX.r, textY); c.font = `900 ${cardH * 0.05}px 'Roboto'`; c.fillText(safeStr(p.w), colX.w, textY); c.font = `500 ${cardH * 0.045}px 'Roboto'`; c.fillText(safeStr(p.e), colX.e, textY); } 
+                else { c.font = `500 ${cardH * 0.03}px 'Roboto'`; if (isActive) { c.fillStyle = "rgba(255,255,255,0.9)"; c.fillText("NOT OUT", colX.dismissal, textY); } else { c.fillStyle = "#94a3b8"; c.fillText(safeStr(p.status).toLowerCase(), colX.dismissal, textY); } c.textAlign = "right"; c.font = `900 ${cardH * 0.055}px 'Roboto'`; c.fillStyle = "white"; c.fillText(safeStr(p.runs), colX.runs, textY); c.font = `500 ${cardH * 0.035}px 'Roboto'`; c.fillStyle = isActive ? "white" : "#94a3b8"; c.fillText(safeStr(p.balls), colX.balls, textY); } currentY += rowH;
+            }); c.restore();
+        }
+
         function drawDismissalCard(c, w, h) {
             const d = match.dismissalData; if(!d) return; const cardW = w * 0.85; const cardH = h * 0.22; const x = (w - cardW) / 2; const y = h - cardH - (h * 0.1);
             c.save(); c.shadowColor = "rgba(0,0,0,0.8)"; c.shadowBlur = 30; c.shadowOffsetY = 15; const bgGrad = c.createLinearGradient(x, y, x + cardW, y); bgGrad.addColorStop(0, "#000000"); bgGrad.addColorStop(0.2, "#001233"); bgGrad.addColorStop(0.8, "#001233"); bgGrad.addColorStop(1, "#000000"); c.fillStyle = bgGrad; drawRoundRect(c, x, y, cardW, cardH, 20); c.fill(); c.shadowColor = "transparent";
             const logoSize = cardH * 0.85; const logoX = x + 40; const logoY = y + (cardH - logoSize) / 2; c.fillStyle = "white"; c.beginPath(); c.arc(logoX + logoSize/2, logoY + logoSize/2, logoSize/2, 0, Math.PI*2); c.fill(); c.fillStyle = "#e2e8f0"; c.beginPath(); c.arc(logoX + logoSize/2, logoY + logoSize/2, logoSize/2 - 4, 0, Math.PI*2); c.fill(); drawLogo(c, "TM", team1Logo, logoX + 4, logoY + 4, logoSize - 8, true);
-            const nameParts = d.name.split(" "); let firstName = ""; let lastName = d.name; if(nameParts.length > 1) { lastName = nameParts.pop(); firstName = nameParts.join(" "); } const textX = logoX + logoSize + 40; const nameY = y + (cardH * 0.45); c.textAlign = "left"; c.textBaseline = "alphabetic"; c.fillStyle = "white"; c.font = `400 ${cardH * 0.35}px 'Roboto'`; c.fillText(firstName.toUpperCase(), textX, nameY); const firstW = c.measureText(firstName.toUpperCase() + " ").width; c.font = `900 ${cardH * 0.35}px 'Roboto'`; c.fillText(lastName.toUpperCase(), textX + (firstName ? firstW : 0), nameY); c.fillStyle = "#94a3b8"; c.font = `500 ${cardH * 0.15}px 'Roboto'`; c.fillText(d.howOut, textX, y + (cardH * 0.7));
-            const boxH = cardH * 0.7; const boxW = boxH * 1.8; const boxX = x + cardW - boxW - 30; const boxY = y + (cardH - boxH) / 2; c.save(); const boxGrad = c.createLinearGradient(boxX, boxY, boxX, boxY + boxH); boxGrad.addColorStop(0, "#3b82f6"); boxGrad.addColorStop(1, "#0f172a"); c.fillStyle = boxGrad; c.strokeStyle = "#cbd5e1"; c.lineWidth = 4; drawRoundRect(c, boxX, boxY, boxW, boxH, 15); c.fill(); c.stroke(); c.fillStyle = "white"; c.textAlign = "center"; c.font = `900 ${boxH * 0.6}px 'Anton'`; c.fillText(d.score, boxX + boxW/2, boxY + boxH * 0.55); c.font = `500 ${boxH * 0.2}px 'Roboto'`; c.fillText(`OFF ${d.balls}`, boxX + boxW/2, boxY + boxH * 0.85); c.restore(); c.restore();
-        }
-
-        // --- RECORDING (UPDATED FOR MP4 & FIX FREEZE) ---
-        function toggleRecording() {
-            const btn = document.getElementById('rec-button');
-            const dot = document.getElementById('rec-indicator');
-            const txt = document.getElementById('rec-text');
-            
-            if(isRecording) {
-                recorder.stop();
-                isRecording = false;
-                btn.classList.remove('recording');
-                dot.style.borderRadius = "50%";
-                txt.innerText = "REC";
-                setTimeout(() => { if(recorder) recorder.stop(); }, 50);
-            } else {
-                const stream = canvas.captureStream(60); 
-                if(video.srcObject) { const audioTracks = video.srcObject.getAudioTracks(); if(audioTracks.length > 0) stream.addTrack(audioTracks[0]); }
-                let options = { mimeType: 'video/mp4;codecs=avc1', videoBitsPerSecond: 8000000 };
-                if(!MediaRecorder.isTypeSupported(options.mimeType)) {
-                    options = { mimeType: 'video/webm;codecs=vp9', videoBitsPerSecond: 8000000 };
-                    if(!MediaRecorder.isTypeSupported(options.mimeType)) {
-                        options = { videoBitsPerSecond: 8000000 }; 
-                    }
-                }
-                try { recorder = new MediaRecorder(stream, options); } catch(e) { recorder = new MediaRecorder(stream); }
-                chunks = []; recorder.ondataavailable = e => { if(e.data.size) chunks.push(e.data); };
-                recorder.onstop = saveVideo; recorder.start();
-                isRecording = true;
-                btn.classList.add('recording');
-                dot.style.borderRadius = "2px";
-                txt.innerText = "RECORDING";
-            }
-        }
-
-        function saveVideo() {
-            setTimeout(() => {
-                const blob = new Blob(chunks, { type: 'video/mp4' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a'); 
-                a.style.display = 'none'; 
-                a.href = url; 
-                a.download = `Match_Rec_${Date.now()}.mp4`; 
-                document.body.appendChild(a); 
-                a.click(); 
-                setTimeout(() => { document.body.removeChild(a); window.URL.revokeObjectURL(url); }, 100);
-            }, 100);
+            const nameParts = safeStr(d.name).split(" "); let firstName = ""; let lastName = safeStr(d.name); if(nameParts.length > 1) { lastName = nameParts.pop(); firstName = nameParts.join(" "); } const textX = logoX + logoSize + 40; const nameY = y + (cardH * 0.45); c.textAlign = "left"; c.textBaseline = "alphabetic"; c.fillStyle = "white"; c.font = `400 ${cardH * 0.35}px 'Roboto'`; c.fillText(firstName.toUpperCase(), textX, nameY); const firstW = c.measureText(firstName.toUpperCase() + " ").width; c.font = `900 ${cardH * 0.35}px 'Roboto'`; c.fillText(lastName.toUpperCase(), textX + (firstName ? firstW : 0), nameY); c.fillStyle = "#94a3b8"; c.font = `500 ${cardH * 0.15}px 'Roboto'`; c.fillText(safeStr(d.howOut), textX, y + (cardH * 0.7));
+            const boxH = cardH * 0.7; const boxW = boxH * 1.8; const boxX = x + cardW - boxW - 30; const boxY = y + (cardH - boxH) / 2; c.save(); const boxGrad = c.createLinearGradient(boxX, boxY, boxX, boxY + boxH); boxGrad.addColorStop(0, "#3b82f6"); boxGrad.addColorStop(1, "#0f172a"); c.fillStyle = boxGrad; c.strokeStyle = "#cbd5e1"; c.lineWidth = 4; drawRoundRect(c, boxX, boxY, boxW, boxH, 15); c.fill(); c.stroke(); c.fillStyle = "white"; c.textAlign = "center"; c.font = `900 ${boxH * 0.6}px 'Anton'`; c.fillText(safeStr(d.score), boxX + boxW/2, boxY + boxH * 0.55); c.font = `500 ${boxH * 0.2}px 'Roboto'`; c.fillText(`OFF ${safeStr(d.balls)}`, boxX + boxW/2, boxY + boxH * 0.85); c.restore(); c.restore();
         }
     </script>
 </body>
