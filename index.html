@@ -472,41 +472,69 @@
             }
         }
 
-        // --- NEW RECORDING LOGIC (Fixed for Stuck Video) ---
+        // --- FIXED RECORDING LOGIC ---
+
         function toggleRecording() {
             if (!isRecording) { startMainRecording(); } else { stopMainRecording(); }
         }
 
         function startMainRecording() {
             try {
-                // FIXED: Use Auto FPS to prevent frame mismatch sticking
-                // This syncs recording exactly with device performance
-                const canvasStream = canvas.captureStream(); 
+                // FIXED: Force 30 FPS to prevent freezing
+                // captureStream(30) forces the browser to output 30 frames every second
+                // even if the renderer or device lags slightly.
+                const canvasStream = canvas.captureStream(30); 
                 
                 const audioTracks = currentStream ? currentStream.getAudioTracks() : [];
+                // Create a new stream combining the stabilized video and existing audio
                 const combinedStream = new MediaStream([ ...canvasStream.getVideoTracks(), ...audioTracks ]);
 
-                const mimeTypes = [ "video/mp4", "video/webm;codecs=h264", "video/webm;codecs=vp9", "video/webm" ];
+                // Better MIME type prioritization for stability
+                const mimeTypes = [
+                    "video/webm;codecs=vp9", 
+                    "video/webm;codecs=h264", 
+                    "video/webm;codecs=vp8", 
+                    "video/mp4"
+                ];
+                
                 let selectedType = mimeTypes.find(type => MediaRecorder.isTypeSupported(type)) || "";
-                if (!selectedType) { alert("Recording not supported."); return; }
+                
+                if (!selectedType) { 
+                    if (MediaRecorder.isTypeSupported("video/webm")) selectedType = "video/webm";
+                    else if (MediaRecorder.isTypeSupported("video/mp4")) selectedType = "video/mp4";
+                    else { alert("Recording not supported on this device."); return; }
+                }
 
-                // High Quality Bitrate (5 Mbps is safe for Auto FPS)
-                const options = { mimeType: selectedType, videoBitsPerSecond: 5000000 };
+                console.log("Recording using:", selectedType);
+
+                // Use 4.5 Mbps bitrate - optimal balance for 1080p/30fps mobile recording
+                const options = { mimeType: selectedType, videoBitsPerSecond: 4500000 };
 
                 recorder = new MediaRecorder(combinedStream, options);
                 chunks = [];
-                recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+                
+                recorder.ondataavailable = e => { 
+                    if (e.data && e.data.size > 0) chunks.push(e.data); 
+                };
+                
                 recorder.onstop = saveRecording;
 
+                // Safety listeners to save if user accidentally closes tab
                 window.addEventListener('beforeunload', emergencySave);
                 window.addEventListener('pagehide', emergencySave);
-                document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') emergencySave(); });
-
+                
+                // Start recording with 1-second chunks for safety
                 recorder.start(1000); 
                 isRecording = true;
+                
+                // Update UI
                 document.getElementById('rec-button').classList.add('recording');
                 document.getElementById('rec-text').innerText = "RECORDING...";
-            } catch (e) { console.error("Rec Error:", e); alert("Could not start recording: " + e.message); }
+                
+            } catch (e) { 
+                console.error("Rec Error:", e); 
+                alert("Could not start recording: " + e.message); 
+            }
         }
 
         function stopMainRecording() {
@@ -524,16 +552,35 @@
 
         function saveRecording() {
             if (chunks.length === 0) return;
+            
+            // Create blob from chunks
             const blob = new Blob(chunks, { type: recorder.mimeType });
             const url = URL.createObjectURL(blob);
+            
             const a = document.createElement('a');
-            a.style.display = 'none'; a.href = url;
+            a.style.display = 'none'; 
+            a.href = url;
+            
             const now = new Date();
             const timestamp = `${now.getHours()}-${now.getMinutes()}-${now.getSeconds()}`;
-            const ext = recorder.mimeType.includes('mp4') ? 'mp4' : 'webm';
+            
+            // Correct File Extension Logic
+            let ext = 'webm';
+            if (recorder.mimeType.includes('mp4')) {
+                ext = 'mp4';
+            }
+            
             a.download = `match-recording-${timestamp}.${ext}`;
-            document.body.appendChild(a); a.click();
-            setTimeout(() => { document.body.removeChild(a); window.URL.revokeObjectURL(url); document.getElementById('rec-text').innerText = "REC"; }, 100);
+            document.body.appendChild(a); 
+            a.click();
+            
+            // Cleanup
+            setTimeout(() => { 
+                document.body.removeChild(a); 
+                window.URL.revokeObjectURL(url); 
+                document.getElementById('rec-text').innerText = "REC"; 
+                chunks = []; // clear memory
+            }, 100);
         }
 
         // --- MENUS & LOGIC ---
