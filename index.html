@@ -251,6 +251,7 @@
         // --- GLOBAL STATE ---
         let match = { t1: "HOME", t2: "AWAY", score: 0, wickets: 0, overs: 0, balls: 0, striker: { name: "", runs: 0, balls: 0 }, nonStriker: { name: "", runs: 0, balls: 0 }, bowler: { name: "", wkts: 0, runs: 0, balls: 0 }, currentOver: [], target: 0, totalOvers: 20, matchStatus: "", winner: "", margin: "", pom: null, showDismissalCard: false, showSummaryOverlay: false };
         let team1Logo = null, team2Logo = null;
+        let t1CapImg = null, t2CapImg = null; // ADDED CAPTAIN IMAGES
         let lastActionId = null, animType = null, animTime = 0;
         
         // PRELOAD CRICKERR LOGO
@@ -620,8 +621,15 @@
                 if(doc.exists) {
                     const data = doc.data();
                     match = { ...match, ...data };
+                    
+                    // 1. Load Team Logos
                     if(data.t1Logo && (!team1Logo || team1Logo.src !== data.t1Logo)) { team1Logo = new Image(); team1Logo.src = data.t1Logo; }
                     if(data.t2Logo && (!team2Logo || team2Logo.src !== data.t2Logo)) { team2Logo = new Image(); team2Logo.src = data.t2Logo; }
+
+                    // 2. NEW: Load Captain Images
+                    if(data.t1CaptainImg && (!t1CapImg || t1CapImg.src !== data.t1CaptainImg)) { t1CapImg = new Image(); t1CapImg.src = data.t1CaptainImg; }
+                    if(data.t2CaptainImg && (!t2CapImg || t2CapImg.src !== data.t2CaptainImg)) { t2CapImg = new Image(); t2CapImg.src = data.t2CaptainImg; }
+
                     if (data.lastAction && data.lastAction.id !== lastActionId) { 
                         lastActionId = data.lastAction.id; 
                         
@@ -1119,7 +1127,14 @@
             if(isChasing) { drawDiv(xToWinEnd); drawDiv(bowlEnd); } else { drawDiv(x5); }
             const xEnd = pillX + pillW;
             const logoS = barH * 0.7;
-            drawLogo(c, match.t1, team1Logo, x1 + 15, bottomY + (barH - logoS)/2, logoS, true);
+
+            // --- FIX: USE CAPTAIN IMAGE IF AVAILABLE, OTHERWISE TEAM LOGO ---
+            // If t1CapImg exists, use it. If not, use team1Logo.
+            const displayImg1 = (t1CapImg && t1CapImg.src) ? t1CapImg : team1Logo;
+            const displayImg2 = (t2CapImg && t2CapImg.src) ? t2CapImg : team2Logo;
+
+            drawLogo(c, match.t1, displayImg1, x1 + 15, bottomY + (barH - logoS)/2, logoS, true);
+            
             c.fillStyle = "white"; c.textAlign = "left";
             fitText(c, formatTeamName(match.t1), x1 + 25 + logoS, bottomY + barH * 0.45, (x2 - x1) - logoS - 35, barH * 0.35, '700', 'Roboto Condensed');
             if (isChasing) {
@@ -1190,7 +1205,10 @@
             const ballsToDraw = [...balls].reverse(); 
             ballsToDraw.forEach(b => { drawBallSquare(c, b, ballX, ballY, ballSize); ballX -= (ballSize + ballGap); });
             const finalDiv = isChasing ? bowlEnd : x5; 
-            drawLogo(c, match.t2, team2Logo, xEnd - 15 - logoS, bottomY + (barH - logoS)/2, logoS, false);
+            
+            // --- FIX: DRAW TEAM 2 CAPTAIN OR LOGO ---
+            drawLogo(c, match.t2, displayImg2, xEnd - 15 - logoS, bottomY + (barH - logoS)/2, logoS, false);
+
             c.fillStyle = "white"; c.textAlign = "right";
             fitText(c, formatTeamName(match.t2), xEnd - 25 - logoS, bottomY + barH * 0.45, (xEnd - finalDiv) - logoS - 35, barH * 0.35, '700', 'Roboto Condensed');
             c.fillStyle = "#64748b"; c.font = `700 ${barH * 0.16}px 'Roboto'`;
