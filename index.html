@@ -63,7 +63,7 @@
             display: none; position: absolute; top: 80px; left: 25px;
             background: rgba(15, 23, 42, 0.95); border: 1px solid #333;
             border-radius: 8px; z-index: 102; flex-direction: column;
-            backdrop-filter: blur(10px); min-width: 180px; /* Widened slightly */
+            backdrop-filter: blur(10px); min-width: 180px;
         }
         .s-option {
             padding: 15px 20px; color: #ccc; cursor: pointer;
@@ -302,6 +302,9 @@
         // --- PEER JS (Wireless) ---
         let peer = null;
         let myPeerId = null;
+        
+        // --- WAKE LOCK ---
+        let wakeLock = null;
 
         // --- INITIALIZATION ---
         window.onload = function() {
@@ -314,7 +317,26 @@
             window.addEventListener('resize', resizeCanvas);
             resizeCanvas();
             initParticles(window.innerWidth, window.innerHeight);
+            requestWakeLock(); // Prevent sleep
         };
+
+        // --- PREVENT SLEEP ---
+        async function requestWakeLock() {
+            try {
+                wakeLock = await navigator.wakeLock.request('screen');
+                wakeLock.addEventListener('release', () => { console.log('Wake Lock Released'); });
+                console.log('Wake Lock Active');
+            } catch (err) {
+                console.error(`${err.name}, ${err.message}`);
+            }
+        }
+
+        // Re-request lock if visibility changes
+        document.addEventListener('visibilitychange', async () => {
+            if (wakeLock !== null && document.visibilityState === 'visible') {
+                requestWakeLock();
+            }
+        });
 
         function resizeCanvas() {
             const dpr = window.devicePixelRatio || 1;
@@ -439,7 +461,7 @@
             }
         }
 
-        // --- NEW RECORDING LOGIC (With Audio, Auto-Save & High Quality) ---
+        // --- NEW RECORDING LOGIC (Fixed for Stuck Video) ---
         function toggleRecording() {
             if (!isRecording) {
                 startMainRecording();
@@ -450,18 +472,16 @@
 
         function startMainRecording() {
             try {
-                // 1. Capture Canvas Video
-                const canvasStream = canvas.captureStream(60); // 60 FPS
-                // 2. Capture Microphone Audio (if available)
+                // FIXED: Capture at 30fps instead of 60fps to prevent encoder choke/stuck video
+                const canvasStream = canvas.captureStream(30); 
+                
                 const audioTracks = currentStream ? currentStream.getAudioTracks() : [];
                 
-                // 3. Mix Video + Audio
                 const combinedStream = new MediaStream([
                     ...canvasStream.getVideoTracks(),
                     ...audioTracks
                 ]);
 
-                // 4. Select Best Format
                 const mimeTypes = [
                     "video/mp4", 
                     "video/webm;codecs=h264", 
@@ -475,10 +495,10 @@
                     return;
                 }
 
-                // 5. High Bitrate for Quality Protection (8 Mbps)
+                // FIXED: Bitrate lowered to 5 Mbps (Safe High Quality) to prevent freezing
                 const options = {
                     mimeType: selectedType,
-                    videoBitsPerSecond: 8000000 
+                    videoBitsPerSecond: 5000000 
                 };
 
                 recorder = new MediaRecorder(combinedStream, options);
@@ -490,17 +510,18 @@
 
                 recorder.onstop = saveRecording;
 
-                // 6. Emergency Auto-Save Listeners
+                // --- EMERGENCY AUTO-SAVE TRIGGERS ---
+                // Stops recording immediately if user switches tabs or screen locks
+                // This prevents "dead air" or stuck frames at the end
                 window.addEventListener('beforeunload', emergencySave);
                 window.addEventListener('pagehide', emergencySave);
                 document.addEventListener('visibilitychange', () => {
                     if (document.visibilityState === 'hidden') emergencySave();
                 });
 
-                recorder.start(1000); // Save chunks every second
+                recorder.start(1000); 
                 isRecording = true;
                 
-                // UI Update
                 document.getElementById('rec-button').classList.add('recording');
                 document.getElementById('rec-text').innerText = "RECORDING...";
 
@@ -515,17 +536,16 @@
                 recorder.stop();
                 isRecording = false;
                 
-                // UI Update
                 document.getElementById('rec-button').classList.remove('recording');
                 document.getElementById('rec-text').innerText = "SAVING...";
                 
-                // Clean Listeners
                 window.removeEventListener('beforeunload', emergencySave);
                 window.removeEventListener('pagehide', emergencySave);
             }
         }
 
         function emergencySave() {
+            // Force stop immediately if app is hidden
             if (isRecording && recorder && recorder.state !== 'inactive') {
                 recorder.stop();
             }
@@ -542,7 +562,6 @@
             
             const now = new Date();
             const timestamp = `${now.getHours()}-${now.getMinutes()}-${now.getSeconds()}`;
-            // Correct extension based on type
             const ext = recorder.mimeType.includes('mp4') ? 'mp4' : 'webm';
             a.download = `match-recording-${timestamp}.${ext}`;
             
