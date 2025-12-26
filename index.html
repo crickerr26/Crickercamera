@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>CRiCKERR_MOB</title>
+    <title>Pro Broadcast Unit - ICC Elite Layout</title>
     
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
@@ -63,7 +63,7 @@
             display: none; position: absolute; top: 80px; left: 25px;
             background: rgba(15, 23, 42, 0.95); border: 1px solid #333;
             border-radius: 8px; z-index: 102; flex-direction: column;
-            backdrop-filter: blur(10px); min-width: 160px;
+            backdrop-filter: blur(10px); min-width: 180px; /* Widened slightly */
         }
         .s-option {
             padding: 15px 20px; color: #ccc; cursor: pointer;
@@ -195,6 +195,7 @@
             <div id="settings-menu" class="hud-item">
                 <div class="s-option" onclick="showObsModal(); toggleSettingsMenu()">Wireless OBS Link</div>
                 <div class="s-option" onclick="changeMatchId()">New Match</div>
+                <div class="s-option" id="btn-toggle-highlights" onclick="toggleHighlights()">Disable Highlights</div>
             </div>
 
             <div id="quality-badge" class="hud-item" onclick="toggleQualityMenu()">1080p</div>
@@ -289,6 +290,7 @@
         let replayType = ""; 
         let transitionStartTime = 0;
         let replayBlobUrl = null;
+        let areHighlightsEnabled = true; 
         
         // ZOOM & CAMERA
         let currentStream = null; 
@@ -375,26 +377,19 @@
 
         // --- REPLAY BUFFER (HIGH QUALITY) ---
         function startRollingReplayBuffer(stream) {
-            // FIXED: Set extremely high bitrate for 4K/1080p smoothness
             const bitRate = 25000000; // 25 Mbps
-
             const types = ["video/mp4", "video/mp4;codecs=avc1", "video/webm;codecs=h264", "video/webm;codecs=vp9", "video/webm"];
             let selectedType = "";
             for (const t of types) { if (MediaRecorder.isTypeSupported(t)) { selectedType = t; break; } }
-
             if (!selectedType) return;
-
             try {
                 const options = { mimeType: selectedType, videoBitsPerSecond: bitRate };
                 replayRecorder = new MediaRecorder(stream, options);
-                
                 replayChunks = [];
                 replayHeader = null; 
-
                 replayRecorder.ondataavailable = (e) => {
                     if (e.data && e.data.size > 0) {
                         if (!replayHeader) { replayHeader = e.data; } else { replayChunks.push(e.data); }
-                        // Keep fewer chunks to prevent RAM overflow with high bitrate
                         const maxChunks = 40; 
                         if(replayChunks.length > maxChunks) { replayChunks.shift(); }
                     }
@@ -404,17 +399,15 @@
         }
 
         function triggerReplay(type) {
+            if (!areHighlightsEnabled) return;
             if (!replayRecorder || !replayHeader) return;
             replayType = type;
             replayRecorder.requestData();
             video.pause();
-
             if (replayVideo) { if(replayBlobUrl) URL.revokeObjectURL(replayBlobUrl); replayVideo.remove(); replayVideo = null; }
-
             const fullBlob = [replayHeader, ...replayChunks];
             const blob = new Blob(fullBlob, { type: replayHeader.type });
             replayBlobUrl = URL.createObjectURL(blob);
-
             replayVideo = document.createElement('video');
             replayVideo.id = "replay-source";
             replayVideo.muted = true; 
@@ -423,10 +416,8 @@
             replayVideo.setAttribute('webkit-playsinline', '');
             replayVideo.style.cssText = "position:absolute; top:0; left:0; width:1px; height:1px; opacity:0.01; pointer-events:none;";
             document.body.appendChild(replayVideo);
-
             replayVideo.src = replayBlobUrl;
             replayVideo.playbackRate = 0.5; 
-
             const playPromise = replayVideo.play();
             if (playPromise !== undefined) {
                 playPromise.then(() => {
@@ -434,7 +425,6 @@
                     transitionStartTime = Date.now();
                 }).catch(error => cleanupReplay());
             }
-            
             replayVideo.onerror = () => cleanupReplay(); 
         }
 
@@ -449,6 +439,123 @@
             }
         }
 
+        // --- NEW RECORDING LOGIC (With Audio, Auto-Save & High Quality) ---
+        function toggleRecording() {
+            if (!isRecording) {
+                startMainRecording();
+            } else {
+                stopMainRecording();
+            }
+        }
+
+        function startMainRecording() {
+            try {
+                // 1. Capture Canvas Video
+                const canvasStream = canvas.captureStream(60); // 60 FPS
+                // 2. Capture Microphone Audio (if available)
+                const audioTracks = currentStream ? currentStream.getAudioTracks() : [];
+                
+                // 3. Mix Video + Audio
+                const combinedStream = new MediaStream([
+                    ...canvasStream.getVideoTracks(),
+                    ...audioTracks
+                ]);
+
+                // 4. Select Best Format
+                const mimeTypes = [
+                    "video/mp4", 
+                    "video/webm;codecs=h264", 
+                    "video/webm;codecs=vp9", 
+                    "video/webm"
+                ];
+                let selectedType = mimeTypes.find(type => MediaRecorder.isTypeSupported(type)) || "";
+
+                if (!selectedType) {
+                    alert("Recording not supported on this device.");
+                    return;
+                }
+
+                // 5. High Bitrate for Quality Protection (8 Mbps)
+                const options = {
+                    mimeType: selectedType,
+                    videoBitsPerSecond: 8000000 
+                };
+
+                recorder = new MediaRecorder(combinedStream, options);
+                chunks = [];
+
+                recorder.ondataavailable = e => {
+                    if (e.data.size > 0) chunks.push(e.data);
+                };
+
+                recorder.onstop = saveRecording;
+
+                // 6. Emergency Auto-Save Listeners
+                window.addEventListener('beforeunload', emergencySave);
+                window.addEventListener('pagehide', emergencySave);
+                document.addEventListener('visibilitychange', () => {
+                    if (document.visibilityState === 'hidden') emergencySave();
+                });
+
+                recorder.start(1000); // Save chunks every second
+                isRecording = true;
+                
+                // UI Update
+                document.getElementById('rec-button').classList.add('recording');
+                document.getElementById('rec-text').innerText = "RECORDING...";
+
+            } catch (e) {
+                console.error("Rec Error:", e);
+                alert("Could not start recording: " + e.message);
+            }
+        }
+
+        function stopMainRecording() {
+            if (recorder && recorder.state !== 'inactive') {
+                recorder.stop();
+                isRecording = false;
+                
+                // UI Update
+                document.getElementById('rec-button').classList.remove('recording');
+                document.getElementById('rec-text').innerText = "SAVING...";
+                
+                // Clean Listeners
+                window.removeEventListener('beforeunload', emergencySave);
+                window.removeEventListener('pagehide', emergencySave);
+            }
+        }
+
+        function emergencySave() {
+            if (isRecording && recorder && recorder.state !== 'inactive') {
+                recorder.stop();
+            }
+        }
+
+        function saveRecording() {
+            if (chunks.length === 0) return;
+            
+            const blob = new Blob(chunks, { type: recorder.mimeType });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.style.display = 'none';
+            a.href = url;
+            
+            const now = new Date();
+            const timestamp = `${now.getHours()}-${now.getMinutes()}-${now.getSeconds()}`;
+            // Correct extension based on type
+            const ext = recorder.mimeType.includes('mp4') ? 'mp4' : 'webm';
+            a.download = `match-recording-${timestamp}.${ext}`;
+            
+            document.body.appendChild(a);
+            a.click();
+            
+            setTimeout(() => {
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(url);
+                document.getElementById('rec-text').innerText = "REC";
+            }, 100);
+        }
+
         // --- MENUS & LOGIC ---
         function toggleQualityMenu() {
             document.getElementById('settings-menu').style.display = 'none'; 
@@ -460,6 +567,13 @@
             document.getElementById('quality-menu').style.display = 'none'; 
             const menu = document.getElementById('settings-menu');
             menu.style.display = menu.style.display === 'flex' ? 'none' : 'flex';
+        }
+
+        function toggleHighlights() {
+            areHighlightsEnabled = !areHighlightsEnabled;
+            const btn = document.getElementById('btn-toggle-highlights');
+            btn.innerText = areHighlightsEnabled ? "Disable Highlights" : "Enable Highlights";
+            toggleSettingsMenu(); 
         }
 
         function changeMatchId() {
