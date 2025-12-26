@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Pro Broadcast Unit - ICC Elite Layout</title>
+    <title>CRiCKERR MOB CAM</title>
     
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
@@ -62,16 +62,45 @@
         #settings-menu {
             display: none; position: absolute; top: 80px; left: 25px;
             background: rgba(15, 23, 42, 0.95); border: 1px solid #333;
-            border-radius: 8px; z-index: 102; flex-direction: column;
-            backdrop-filter: blur(10px); min-width: 180px;
+            border-radius: 12px; z-index: 102; flex-direction: column;
+            backdrop-filter: blur(10px); min-width: 220px;
+            padding: 5px 0;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
         }
         .s-option {
             padding: 15px 20px; color: #ccc; cursor: pointer;
-            font-family: 'Roboto'; font-size: 14px; border-bottom: 1px solid rgba(255,255,255,0.1);
-            font-weight: bold;
+            font-family: 'Roboto'; font-size: 15px; border-bottom: 1px solid rgba(255,255,255,0.1);
+            font-weight: 500; display: flex; justify-content: space-between; align-items: center;
         }
         .s-option:last-child { border-bottom: none; }
         .s-option:hover { background: rgba(255,255,255,0.1); color: white; }
+
+        /* --- IPHONE STYLE TOGGLE --- */
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 50px;
+            height: 28px;
+        }
+        .toggle-switch input { opacity: 0; width: 0; height: 0; }
+        .slider {
+            position: absolute; cursor: pointer;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: #4b5563; /* Gray when off */
+            transition: .4s;
+            border-radius: 34px;
+        }
+        .slider:before {
+            position: absolute; content: "";
+            height: 24px; width: 24px;
+            left: 2px; bottom: 2px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+        input:checked + .slider { background-color: #22c55e; /* Green when on */ }
+        input:checked + .slider:before { transform: translateX(22px); }
 
         /* QUALITY INDICATOR & MENU */
         #quality-badge {
@@ -193,9 +222,19 @@
             <div id="gear-button" class="hud-item" onclick="toggleSettingsMenu()">⚙️</div>
             
             <div id="settings-menu" class="hud-item">
-                <div class="s-option" onclick="showObsModal(); toggleSettingsMenu()">Wireless OBS Link</div>
-                <div class="s-option" onclick="changeMatchId()">New Match</div>
-                <div class="s-option" id="btn-toggle-highlights" onclick="toggleHighlights()">Disable Highlights</div>
+                <div class="s-option" onclick="showObsModal(); toggleSettingsMenu()">
+                    <span>Wireless OBS Link</span>
+                </div>
+                <div class="s-option" onclick="changeMatchId()">
+                    <span>New Match</span>
+                </div>
+                <div class="s-option">
+                    <span>Replay Highlights</span>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="check-highlights" onchange="toggleHighlights(this)">
+                        <span class="slider"></span>
+                    </label>
+                </div>
             </div>
 
             <div id="quality-badge" class="hud-item" onclick="toggleQualityMenu()">1080p</div>
@@ -290,7 +329,7 @@
         let replayType = ""; 
         let transitionStartTime = 0;
         let replayBlobUrl = null;
-        let areHighlightsEnabled = true; 
+        let areHighlightsEnabled = false; // DISABLED BY DEFAULT
         
         // ZOOM & CAMERA
         let currentStream = null; 
@@ -314,10 +353,14 @@
                 return;
             }
             if(params.has('id')) { document.getElementById('match-id').value = params.get('id'); }
+            
+            // Set Highlight Toggle State UI
+            document.getElementById('check-highlights').checked = areHighlightsEnabled;
+
             window.addEventListener('resize', resizeCanvas);
             resizeCanvas();
             initParticles(window.innerWidth, window.innerHeight);
-            requestWakeLock(); // Prevent sleep
+            requestWakeLock(); 
         };
 
         // --- PREVENT SLEEP ---
@@ -326,16 +369,10 @@
                 wakeLock = await navigator.wakeLock.request('screen');
                 wakeLock.addEventListener('release', () => { console.log('Wake Lock Released'); });
                 console.log('Wake Lock Active');
-            } catch (err) {
-                console.error(`${err.name}, ${err.message}`);
-            }
+            } catch (err) { console.error(`${err.name}, ${err.message}`); }
         }
-
-        // Re-request lock if visibility changes
         document.addEventListener('visibilitychange', async () => {
-            if (wakeLock !== null && document.visibilityState === 'visible') {
-                requestWakeLock();
-            }
+            if (wakeLock !== null && document.visibilityState === 'visible') { requestWakeLock(); }
         });
 
         function resizeCanvas() {
@@ -352,11 +389,8 @@
         function connectToMatch() {
             const id = document.getElementById('match-id').value;
             if(!id) return alert("Please enter Match ID");
-            
             try { ['audio-four','audio-six','audio-wicket'].forEach(id => document.getElementById(id).load()); } catch(e){}
-
             startCameraStream(1920, 1080);
-            
             document.getElementById('setup-screen').style.display = 'none';
             document.getElementById('app-container').style.display = 'block';
             resizeCanvas();
@@ -366,40 +400,29 @@
 
         // --- QUALITY CONTROL LOGIC ---
         async function startCameraStream(width, height) {
-            if(currentStream) {
-                currentStream.getTracks().forEach(track => track.stop());
-            }
-
-            const constraints = {
-                video: { facingMode: "environment", width: { ideal: width }, height: { ideal: height }, frameRate: { ideal: 60 } }, 
-                audio: true 
-            };
-
+            if(currentStream) { currentStream.getTracks().forEach(track => track.stop()); }
+            const constraints = { video: { facingMode: "environment", width: { ideal: width }, height: { ideal: height }, frameRate: { ideal: 60 } }, audio: true };
             try {
                 const stream = await navigator.mediaDevices.getUserMedia(constraints);
                 currentStream = stream;
                 video.srcObject = stream;
                 video.muted = true;
                 video.play().catch(e => console.error(e));
-
                 startRollingReplayBuffer(stream);
-
                 const actualH = stream.getVideoTracks()[0].getSettings().height;
                 const label = actualH > 1080 ? "4K" : (actualH > 720 ? "1080p" : "720p");
                 document.getElementById('quality-badge').innerText = label;
-
                 videoTrack = stream.getVideoTracks()[0];
                 setupZoom();
-
             } catch(e) {
                 console.error("Camera failed:", e);
                 alert("Camera failed to start: " + e.message);
             }
         }
 
-        // --- REPLAY BUFFER (HIGH QUALITY) ---
+        // --- REPLAY BUFFER ---
         function startRollingReplayBuffer(stream) {
-            const bitRate = 25000000; // 25 Mbps
+            const bitRate = 25000000; 
             const types = ["video/mp4", "video/mp4;codecs=avc1", "video/webm;codecs=h264", "video/webm;codecs=vp9", "video/webm"];
             let selectedType = "";
             for (const t of types) { if (MediaRecorder.isTypeSupported(t)) { selectedType = t; break; } }
@@ -407,13 +430,11 @@
             try {
                 const options = { mimeType: selectedType, videoBitsPerSecond: bitRate };
                 replayRecorder = new MediaRecorder(stream, options);
-                replayChunks = [];
-                replayHeader = null; 
+                replayChunks = []; replayHeader = null; 
                 replayRecorder.ondataavailable = (e) => {
                     if (e.data && e.data.size > 0) {
                         if (!replayHeader) { replayHeader = e.data; } else { replayChunks.push(e.data); }
-                        const maxChunks = 40; 
-                        if(replayChunks.length > maxChunks) { replayChunks.shift(); }
+                        if(replayChunks.length > 40) { replayChunks.shift(); }
                     }
                 };
                 replayRecorder.start(400); 
@@ -463,116 +484,64 @@
 
         // --- NEW RECORDING LOGIC (Fixed for Stuck Video) ---
         function toggleRecording() {
-            if (!isRecording) {
-                startMainRecording();
-            } else {
-                stopMainRecording();
-            }
+            if (!isRecording) { startMainRecording(); } else { stopMainRecording(); }
         }
 
         function startMainRecording() {
             try {
-                // FIXED: Capture at 30fps instead of 60fps to prevent encoder choke/stuck video
-                const canvasStream = canvas.captureStream(30); 
-                
+                // FIXED: Use Auto FPS to prevent frame mismatch sticking
+                const canvasStream = canvas.captureStream(); 
                 const audioTracks = currentStream ? currentStream.getAudioTracks() : [];
-                
-                const combinedStream = new MediaStream([
-                    ...canvasStream.getVideoTracks(),
-                    ...audioTracks
-                ]);
+                const combinedStream = new MediaStream([ ...canvasStream.getVideoTracks(), ...audioTracks ]);
 
-                const mimeTypes = [
-                    "video/mp4", 
-                    "video/webm;codecs=h264", 
-                    "video/webm;codecs=vp9", 
-                    "video/webm"
-                ];
+                const mimeTypes = [ "video/mp4", "video/webm;codecs=h264", "video/webm;codecs=vp9", "video/webm" ];
                 let selectedType = mimeTypes.find(type => MediaRecorder.isTypeSupported(type)) || "";
+                if (!selectedType) { alert("Recording not supported."); return; }
 
-                if (!selectedType) {
-                    alert("Recording not supported on this device.");
-                    return;
-                }
-
-                // FIXED: Bitrate lowered to 5 Mbps (Safe High Quality) to prevent freezing
-                const options = {
-                    mimeType: selectedType,
-                    videoBitsPerSecond: 5000000 
-                };
+                // High Quality Bitrate (8 Mbps)
+                const options = { mimeType: selectedType, videoBitsPerSecond: 8000000 };
 
                 recorder = new MediaRecorder(combinedStream, options);
                 chunks = [];
-
-                recorder.ondataavailable = e => {
-                    if (e.data.size > 0) chunks.push(e.data);
-                };
-
+                recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
                 recorder.onstop = saveRecording;
 
-                // --- EMERGENCY AUTO-SAVE TRIGGERS ---
-                // Stops recording immediately if user switches tabs or screen locks
-                // This prevents "dead air" or stuck frames at the end
                 window.addEventListener('beforeunload', emergencySave);
                 window.addEventListener('pagehide', emergencySave);
-                document.addEventListener('visibilitychange', () => {
-                    if (document.visibilityState === 'hidden') emergencySave();
-                });
+                document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') emergencySave(); });
 
                 recorder.start(1000); 
                 isRecording = true;
-                
                 document.getElementById('rec-button').classList.add('recording');
                 document.getElementById('rec-text').innerText = "RECORDING...";
-
-            } catch (e) {
-                console.error("Rec Error:", e);
-                alert("Could not start recording: " + e.message);
-            }
+            } catch (e) { console.error("Rec Error:", e); alert("Could not start recording: " + e.message); }
         }
 
         function stopMainRecording() {
             if (recorder && recorder.state !== 'inactive') {
                 recorder.stop();
                 isRecording = false;
-                
                 document.getElementById('rec-button').classList.remove('recording');
                 document.getElementById('rec-text').innerText = "SAVING...";
-                
                 window.removeEventListener('beforeunload', emergencySave);
                 window.removeEventListener('pagehide', emergencySave);
             }
         }
 
-        function emergencySave() {
-            // Force stop immediately if app is hidden
-            if (isRecording && recorder && recorder.state !== 'inactive') {
-                recorder.stop();
-            }
-        }
+        function emergencySave() { if (isRecording && recorder && recorder.state !== 'inactive') { recorder.stop(); } }
 
         function saveRecording() {
             if (chunks.length === 0) return;
-            
             const blob = new Blob(chunks, { type: recorder.mimeType });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
-            a.style.display = 'none';
-            a.href = url;
-            
+            a.style.display = 'none'; a.href = url;
             const now = new Date();
             const timestamp = `${now.getHours()}-${now.getMinutes()}-${now.getSeconds()}`;
             const ext = recorder.mimeType.includes('mp4') ? 'mp4' : 'webm';
             a.download = `match-recording-${timestamp}.${ext}`;
-            
-            document.body.appendChild(a);
-            a.click();
-            
-            setTimeout(() => {
-                document.body.removeChild(a);
-                window.URL.revokeObjectURL(url);
-                document.getElementById('rec-text').innerText = "REC";
-            }, 100);
+            document.body.appendChild(a); a.click();
+            setTimeout(() => { document.body.removeChild(a); window.URL.revokeObjectURL(url); document.getElementById('rec-text').innerText = "REC"; }, 100);
         }
 
         // --- MENUS & LOGIC ---
@@ -588,11 +557,10 @@
             menu.style.display = menu.style.display === 'flex' ? 'none' : 'flex';
         }
 
-        function toggleHighlights() {
-            areHighlightsEnabled = !areHighlightsEnabled;
-            const btn = document.getElementById('btn-toggle-highlights');
-            btn.innerText = areHighlightsEnabled ? "Disable Highlights" : "Enable Highlights";
-            toggleSettingsMenu(); 
+        // --- NEW TOGGLE HANDLER ---
+        function toggleHighlights(checkbox) {
+            areHighlightsEnabled = checkbox.checked;
+            // No need to close menu immediately, standard UX
         }
 
         function changeMatchId() {
@@ -686,12 +654,10 @@
                 if(doc.exists) {
                     const data = doc.data();
                     match = { ...match, ...data };
-                    
                     if(data.t1Logo && (!team1Logo || team1Logo.src !== data.t1Logo)) { team1Logo = new Image(); team1Logo.src = data.t1Logo; }
                     if(data.t2Logo && (!team2Logo || team2Logo.src !== data.t2Logo)) { team2Logo = new Image(); team2Logo.src = data.t2Logo; }
                     if(data.t1CaptainImg && (!t1CapImg || t1CapImg.src !== data.t1CaptainImg)) { t1CapImg = new Image(); t1CapImg.src = data.t1CaptainImg; }
                     if(data.t2CaptainImg && (!t2CapImg || t2CapImg.src !== data.t2CaptainImg)) { t2CapImg = new Image(); t2CapImg.src = data.t2CaptainImg; }
-
                     if (data.lastAction && data.lastAction.id !== lastActionId) { 
                         lastActionId = data.lastAction.id; 
                         triggerAudio(data.lastAction.type);
@@ -713,22 +679,16 @@
             }
         }
 
-        function triggerAnim(type) {
-            animType = type; 
-            animTime = Date.now();
-        }
+        function triggerAnim(type) { animType = type; animTime = Date.now(); }
 
         // --- RENDER LOOP ---
         function renderLoop() {
             const w = window.innerWidth;
             const h = window.innerHeight;
-            
             ctx.clearRect(0, 0, w, h);
-            
             if (replayState === "LIVE") {
                 drawVideoObject(video, w, h);
                 drawLiveGraphics(w, h);
-            
             } else if (replayState === "TRANSITION_IN") {
                 drawVideoObject(video, w, h);
                 let finished = drawCoolStinger(w, h, "IN");
@@ -737,7 +697,6 @@
                     if(replayVideo) replayVideo.play().catch(e => {});
                     replayStartTime = Date.now();
                 }
-
             } else if (replayState === "PLAYING") {
                 if(replayVideo) drawVideoObject(replayVideo, w, h);
                 drawReplayOverlay(w, h);
@@ -745,15 +704,11 @@
                     replayState = "TRANSITION_OUT";
                     transitionStartTime = Date.now();
                 }
-
             } else if (replayState === "TRANSITION_OUT") {
                 drawVideoObject(video, w, h); 
                 let finished = drawCoolStinger(w, h, "OUT");
-                if (finished) {
-                    cleanupReplay(); 
-                }
+                if (finished) { cleanupReplay(); }
             }
-            
             requestAnimationFrame(renderLoop);
         }
 
@@ -762,11 +717,8 @@
                 const vidRatio = vidObj.videoWidth / vidObj.videoHeight;
                 const screenRatio = w / h;
                 let drawW, drawH, drawX, drawY;
-                if (screenRatio > vidRatio) {
-                    drawW = w; drawH = w / vidRatio; drawX = 0; drawY = (h - drawH) / 2;
-                } else {
-                    drawW = h * vidRatio; drawH = h; drawX = (w - drawW) / 2; drawY = 0;
-                }
+                if (screenRatio > vidRatio) { drawW = w; drawH = w / vidRatio; drawX = 0; drawY = (h - drawH) / 2; } 
+                else { drawW = h * vidRatio; drawH = h; drawX = (w - drawW) / 2; drawY = 0; }
                 ctx.drawImage(vidObj, drawX, drawY, drawW, drawH);
             }
         }
@@ -776,8 +728,7 @@
             c.save();
             particles.forEach(p => {
                 p.y -= p.s; p.x += Math.sin(p.d) * 0.2;
-                if(p.y < 0) p.y = h;
-                p.d += 0.02;
+                if(p.y < 0) p.y = h; p.d += 0.02;
                 c.beginPath(); c.arc(p.x, p.y, p.r, 0, Math.PI*2);
                 c.fillStyle = `rgba(255, 255, 255, ${p.alpha})`; c.fill();
             });
@@ -786,13 +737,9 @@
 
         // --- STINGER ---
         function drawCoolStinger(w, h, direction) {
-            const now = Date.now();
-            const elapsed = now - transitionStartTime;
-            const duration = 2500; 
-            let p = elapsed / duration;
+            const now = Date.now(); const elapsed = now - transitionStartTime; const duration = 2500; let p = elapsed / duration;
             if (p > 1) return true;
             const ease = p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2;
-            
             ctx.save();
             let coverAlpha = 0;
             if(p < 0.3) coverAlpha = p / 0.3; else if(p > 0.7) coverAlpha = (1 - p) / 0.3; else coverAlpha = 1;                     
@@ -802,12 +749,8 @@
                 ctx.beginPath(); ctx.moveTo(offset, 0); ctx.lineTo(offset + (w*0.2), 0); ctx.lineTo(offset + (w*0.1), h); ctx.lineTo(offset - (w*0.1), h);
                 ctx.fillStyle = "rgba(59, 130, 246, 0.6)"; ctx.fill();
                 if (coverAlpha > 0.8 && crickerrLogoImg.complete) {
-                    const ls = h * 0.4;
-                    const pulse = 1 + Math.sin(p * 10) * 0.05;
-                    const dW = ls * pulse; const dH = ls * pulse;
-                    ctx.shadowColor = "white"; ctx.shadowBlur = 20;
-                    ctx.drawImage(crickerrLogoImg, (w-dW)/2, (h-dH)/2, dW, dH);
-                    ctx.shadowBlur = 0;
+                    const ls = h * 0.4; const pulse = 1 + Math.sin(p * 10) * 0.05; const dW = ls * pulse; const dH = ls * pulse;
+                    ctx.shadowColor = "white"; ctx.shadowBlur = 20; ctx.drawImage(crickerrLogoImg, (w-dW)/2, (h-dH)/2, dW, dH); ctx.shadowBlur = 0;
                 }
             }
             ctx.restore(); return false;
@@ -815,24 +758,18 @@
 
         // --- REPLAY GRAPHICS ---
         function drawReplayOverlay(w, h) {
-            let text = "", subText = "", color1 = "", color2 = "", shape = "";
-            let textOffset = 0; 
-
+            let text = "", subText = "", color1 = "", color2 = "", shape = ""; let textOffset = 0; 
             if (replayType === '6') { text = "6"; subText = "MAXIMUM"; color1 = "#22c55e"; color2 = "#14532d"; shape = "HEX"; textOffset = 0.05; } 
             else if (replayType === '4') { text = "4"; subText = "BOUNDARY"; color1 = "#3b82f6"; color2 = "#172554"; shape = "CIRCLE"; textOffset = 0.05; } 
             else if (replayType === 'W') { text = "OUT"; subText = "WICKET"; color1 = "#ef4444"; color2 = "#7f1d1d"; shape = "BOX"; textOffset = 0.02; } 
             else { text = "R"; subText = "REPLAY"; color1 = "#f59e0b"; color2 = "#78350f"; shape = "CIRCLE"; textOffset = 0.05; }
-
             const now = Date.now(); const elapsed = now - replayStartTime;
             const animDelay = 300; const animTime = Math.max(0, elapsed - animDelay);
             let progress = animTime / 600; let scale = getElasticScale(progress);
             if (progress >= 1) scale = 1 + (Math.sin(now / 400) * 0.02);
-            const sheenPos = (now % 2000) / 2000; 
-
-            const badgeSize = h * 0.16; 
+            const sheenPos = (now % 2000) / 2000; const badgeSize = h * 0.16; 
             const barH = h * 0.095; const bottomY = h - barH - (h * 0.03); const goldH = barH * 0.04; const goldY = bottomY - goldH - 2; 
             const posX = w * 0.09; const posY = goldY - (badgeSize / 1.7); 
-
             ctx.save(); ctx.translate(posX, posY); ctx.scale(scale, scale);
             ctx.save(); ctx.shadowColor = "rgba(0,0,0,0.7)"; ctx.shadowBlur = 20; ctx.shadowOffsetY = 10; ctx.fillStyle = "black"; drawBadgeShape(ctx, shape, badgeSize); ctx.fill(); ctx.restore();
             const grad = ctx.createLinearGradient(-badgeSize/2, -badgeSize/2, badgeSize/2, badgeSize/2); grad.addColorStop(0, color1); grad.addColorStop(1, color2); ctx.fillStyle = grad; drawBadgeShape(ctx, shape, badgeSize); ctx.fill();
@@ -862,65 +799,34 @@
 
         // --- LIVE GRAPHICS ---
         function drawLiveGraphics(w, h) {
-            if (match.showDismissalCard === true && match.dismissalData) {
-                drawDismissalCard(ctx, w, h);
-            } 
+            if (match.showDismissalCard === true && match.dismissalData) { drawDismissalCard(ctx, w, h); } 
             else if (match.matchStatus === "COMPLETE" || match.showSummaryOverlay === true) {
-                if (match.summaryType === "SQUAD") {
-                    drawSquadBoard(ctx, w, h);
-                } else if (match.summaryType === "MATCH_RESULT") {
-                    drawFinalResult(ctx, w, h);
-                } else {
-                    drawProfessionalSummary(ctx, w, h);
-                }
-            } 
-            else {
-                drawNewLayout(ctx, w, h);
-                drawPopups(ctx, w, h);
-            }
+                if (match.summaryType === "SQUAD") { drawSquadBoard(ctx, w, h); } 
+                else if (match.summaryType === "MATCH_RESULT") { drawFinalResult(ctx, w, h); } 
+                else { drawProfessionalSummary(ctx, w, h); }
+            } else { drawNewLayout(ctx, w, h); drawPopups(ctx, w, h); }
         }
 
-        // --- SAFE STRING HELPER FOR CRASH PREVENTION ---
-        function safeStr(val) {
-            if (val === null || val === undefined) return "";
-            if (typeof val === 'string') return val;
-            return String(val);
-        }
+        function safeStr(val) { if (val === null || val === undefined) return ""; if (typeof val === 'string') return val; return String(val); }
+        function safeTeamName(t) { if (typeof t === 'object' && t !== null && t.name) return safeStr(t.name); if (typeof t === 'string') return t; return "TEAM"; }
 
-        function safeTeamName(t) {
-            if (typeof t === 'object' && t !== null && t.name) return safeStr(t.name);
-            if (typeof t === 'string') return t;
-            return "TEAM";
-        }
-
-        // --- NEW DRAW MATCH RESULT DASHBOARD (FIXED) ---
         function drawFinalResult(c, w, h) {
             try {
-                // 1. BACKGROUND
                 const bgGrad = c.createLinearGradient(0, 0, w, h); bgGrad.addColorStop(0, "#2e1065"); bgGrad.addColorStop(1, "#1e1b4b"); c.fillStyle = bgGrad; c.fillRect(0, 0, w, h);
                 drawParticles(c, w, h);
-
-                // 2. HEADER
                 const titleY = h * 0.12; c.textAlign = "center"; c.shadowColor = "rgba(0,0,0,0.5)"; c.shadowBlur = 20; c.shadowOffsetY = 10;
                 c.fillStyle = "#fbbf24"; c.font = `700 ${h * 0.025}px 'Roboto'`; c.fillText("MATCH RESULT", w/2, h * 0.08); 
                 c.fillStyle = "#fef08a"; c.font = `900 ${h * 0.1}px 'Anton'`; c.fillText((match.resultMain || "MATCH COMPLETE").toUpperCase(), w/2, h * 0.18); 
-
                 const subY = h * 0.22; const subText = match.resultSub || "-"; c.font = `700 ${h * 0.03}px 'Roboto Condensed'`; const subW = c.measureText(subText).width + 60;
                 c.fillStyle = "rgba(255,255,255,0.1)"; drawRoundRect(c, (w-subW)/2, subY, subW, h*0.05, 20); c.fill(); c.strokeStyle = "rgba(255,255,255,0.2)"; c.lineWidth = 2; c.stroke();
                 c.fillStyle = "white"; c.textBaseline = "middle"; c.fillText(subText, w/2, subY + (h*0.025)); c.textBaseline = "alphabetic"; 
-
-                // 3. TEAM SCORE CARDS
                 const cardY = h * 0.30; const cardH = h * 0.18; const cardW = w * 0.35; const cardGap = w * 0.04; const t1X = (w/2) - cardW - (cardGap/2); const t2X = (w/2) + (cardGap/2);
                 drawResultTeamCard(c, t1X, cardY, cardW, cardH, match.t1, team1Logo); drawResultTeamCard(c, t2X, cardY, cardW, cardH, match.t2, team2Logo);
-
-                // 4. STATS LISTS
                 const listY = cardY + cardH + (h * 0.04); const listH = h * 0.32; const listW = w * 0.28; const listGap = (w - (listW * 3)) / 4; 
                 const col1X = listGap; const col2X = listGap + listW + listGap; const col3X = listGap + (listW + listGap) * 2;
                 drawStatBox(c, col1X, listY, listW, listH, "TOP BATTERS", match.topBatters || [], "BAT");
                 drawStatBox(c, col2X, listY, listW, listH, "TOP BOWLERS", match.topBowlers || [], "BOWL");
                 drawPomBox(c, col3X, listY, listW, listH, match.pom);
-
-                // 5. FOOTER
                 const footerH = h * 0.08; const footerY = h - footerH; c.fillStyle = "rgba(0,0,0,0.6)"; c.fillRect(0, footerY, w, footerH); const contentY = footerY + (footerH/2);
                 let logoOffset = 0;
                 if (crickerrLogoImg.complete && crickerrLogoImg.naturalHeight > 0) {
@@ -934,75 +840,32 @@
 
         function drawResultTeamCard(c, x, y, w, h, data, img) {
             c.save(); c.fillStyle = "rgba(255,255,255,0.1)"; drawRoundRect(c, x, y, w, h, 15); c.fill(); c.strokeStyle = "rgba(255,255,255,0.2)"; c.lineWidth = 2; c.stroke();
-            
-            // Safety: Create a safe data object if data is null/string
             let safeData = { name: "TEAM", score: "0/0", overs: "0.0" };
-            if (data && typeof data === 'object') safeData = data;
-            else if (typeof data === 'string') safeData.name = data;
-
+            if (data && typeof data === 'object') safeData = data; else if (typeof data === 'string') safeData.name = data;
             const logoS = h * 0.7;
-            // Draw Logo with White Border
             if (img && img.complete && img.naturalHeight !== 0) { drawLogo(c, safeStr(safeData.name), img, x + 20, y + (h-logoS)/2, logoS, true); } 
             else { drawLogo(c, safeStr(safeData.name), null, x + 20, y + (h-logoS)/2, logoS, true); }
             c.beginPath(); c.arc(x + 20 + logoS/2, y + (h-logoS)/2 + logoS/2, logoS/2 + 2, 0, Math.PI*2); c.lineWidth = 4; c.strokeStyle = "white"; c.stroke();
-
             c.textAlign = "left"; c.fillStyle = "#94a3b8"; c.font = `700 ${h * 0.15}px 'Roboto Condensed'`; c.fillText(safeStr(safeData.name), x + 40 + logoS, y + h * 0.35);
             c.fillStyle = "white"; c.font = `900 ${h * 0.4}px 'Anton'`; c.fillText(safeStr(safeData.score) || "0/0", x + 40 + logoS, y + h * 0.75);
             c.textAlign = "right"; c.fillStyle = "#cbd5e1"; c.font = `500 ${h * 0.2}px 'Roboto'`; c.fillText((safeStr(safeData.overs) || "0.0") + " ov", x + w - 20, y + h * 0.55);
             c.restore();
         }
 
-        // --- FIXED ALIGNMENT IN STAT BOX ---
         function drawStatBox(c, x, y, w, h, title, list, type) {
-            c.save(); 
-            c.fillStyle = "rgba(0,0,0,0.3)"; 
-            drawRoundRect(c, x, y, w, h, 15); c.fill(); 
-            c.strokeStyle = "rgba(255,255,255,0.1)"; c.lineWidth = 1; c.stroke();
-
-            // FIXED TITLE ALIGNMENT
-            c.fillStyle = "#fbbf24";
-            c.font = `900 ${h * 0.08}px 'Roboto Condensed'`;
-            c.textAlign = "left";
-            c.fillText((type === "BAT" ? "🏏 " : "⚾ ") + title, x + (w * 0.08), y + (h * 0.15));
-
+            c.save(); c.fillStyle = "rgba(0,0,0,0.3)"; drawRoundRect(c, x, y, w, h, 15); c.fill(); c.strokeStyle = "rgba(255,255,255,0.1)"; c.lineWidth = 1; c.stroke();
+            c.fillStyle = "#fbbf24"; c.font = `900 ${h * 0.08}px 'Roboto Condensed'`; c.textAlign = "left"; c.fillText((type === "BAT" ? "🏏 " : "⚾ ") + title, x + (w * 0.08), y + (h * 0.15));
             if(!list || !Array.isArray(list)) { c.restore(); return; }
-
-            // FIXED LIST START POSITION
-            let rowY = y + (h * 0.35); 
-            const rowH = (h * 0.7) / 3;
-
+            let rowY = y + (h * 0.35); const rowH = (h * 0.7) / 3;
             list.forEach((p, i) => {
-                // FIXED PLAYER NAME ALIGNMENT
-                c.fillStyle = "white"; 
-                c.font = `700 ${h * 0.07}px 'Roboto'`; 
-                c.textAlign = "left"; 
-                c.fillText(safeStr(p.name), x + (w * 0.08), rowY);
-                
-                c.fillStyle = "#94a3b8"; 
-                c.font = `500 ${h * 0.05}px 'Roboto'`; 
-                c.fillText(safeStr(p.team), x + (w * 0.08), rowY + 20);
-
-                c.textAlign = "right"; 
-                c.fillStyle = "#fbbf24"; 
-                c.font = `900 ${h * 0.08}px 'Roboto Condensed'`;
-                
-                if (type === "BAT") { 
-                    c.fillText(safeStr(p.runs), x + w - 20, rowY); 
-                    c.fillStyle = "#64748b"; c.font = `500 ${h * 0.05}px 'Roboto'`; 
-                    c.fillText(safeStr(p.balls) + " balls", x + w - 20, rowY + 20); 
-                } else { 
-                    c.fillText(`${safeStr(p.wickets)}/${safeStr(p.runs)}`, x + w - 20, rowY); 
-                    c.fillStyle = "#64748b"; c.font = `500 ${h * 0.05}px 'Roboto'`; 
-                    c.fillText(safeStr(p.balls) + " balls", x + w - 20, rowY + 20); 
-                }
-                
-                if (i < 2) { 
-                    c.beginPath(); c.moveTo(x+20, rowY+35); c.lineTo(x+w-20, rowY+35); 
-                    c.strokeStyle = "rgba(255,255,255,0.1)"; c.stroke(); 
-                } 
+                c.fillStyle = "white"; c.font = `700 ${h * 0.07}px 'Roboto'`; c.textAlign = "left"; c.fillText(safeStr(p.name), x + (w * 0.08), rowY);
+                c.fillStyle = "#94a3b8"; c.font = `500 ${h * 0.05}px 'Roboto'`; c.fillText(safeStr(p.team), x + (w * 0.08), rowY + 20);
+                c.textAlign = "right"; c.fillStyle = "#fbbf24"; c.font = `900 ${h * 0.08}px 'Roboto Condensed'`;
+                if (type === "BAT") { c.fillText(safeStr(p.runs), x + w - 20, rowY); c.fillStyle = "#64748b"; c.font = `500 ${h * 0.05}px 'Roboto'`; c.fillText(safeStr(p.balls) + " balls", x + w - 20, rowY + 20); } 
+                else { c.fillText(`${safeStr(p.wickets)}/${safeStr(p.runs)}`, x + w - 20, rowY); c.fillStyle = "#64748b"; c.font = `500 ${h * 0.05}px 'Roboto'`; c.fillText(safeStr(p.balls) + " balls", x + w - 20, rowY + 20); }
+                if (i < 2) { c.beginPath(); c.moveTo(x+20, rowY+35); c.lineTo(x+w-20, rowY+35); c.strokeStyle = "rgba(255,255,255,0.1)"; c.stroke(); } 
                 rowY += rowH;
-            }); 
-            c.restore();
+            }); c.restore();
         }
 
         function drawPomBox(c, x, y, w, h, pom) {
@@ -1014,7 +877,6 @@
             } c.restore();
         }
 
-        // --- GRAPHICS HELPERS ---
         function formatTeamName(name) { if (!name) return "TEAM"; let formatted = String(name).toUpperCase(); formatted = formatted.replace(/\bCRICKET CLUB\b/g, "C.C").replace(/\bCRICKET\b/g, "C.C").replace(/\bCC\b/g, "C.C"); return formatted; }
         function formatPlayerName(fullName) { if (!fullName) return ""; const parts = String(fullName).trim().split(/\s+/); if (parts.length > 1) { return (parts[0] + " " + parts[1].charAt(0) + ".").toUpperCase(); } return parts[0].toUpperCase(); }
         function drawRoundRect(c, x, y, w, h, r) { if (w < 2 * r) r = w / 2; if (h < 2 * r) r = h / 2; c.beginPath(); c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r); c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath(); }
@@ -1026,7 +888,6 @@
         function drawSquadBoard(c, w, h) { if (!match.squad1 || !match.squad2) return; const now = Date.now(); const animDuration = 800; let progress = (now - transitionStartTime) / animDuration; progress = Math.min(1, Math.max(0, progress)); const ease = 1 - Math.pow(1 - progress, 3); const cardW = w * 0.9; const cardH = h * 0.85; const cardX = (w - cardW) / 2; const finalY = (h - cardH) / 2; const currentY = h - ((h - finalY) * ease); c.save(); c.globalAlpha = ease; c.shadowColor = "rgba(0,0,0,0.8)"; c.shadowBlur = 50; c.shadowOffsetY = 20; const bgGrad = c.createLinearGradient(cardX, currentY, cardX + cardW, currentY + cardH); bgGrad.addColorStop(0, "#020617"); bgGrad.addColorStop(0.5, "#1e3a8a"); bgGrad.addColorStop(1, "#020617"); c.fillStyle = bgGrad; drawRoundRect(c, cardX, currentY, cardW, cardH, 20); c.fill(); const moveOffset = (now * 0.02) % 100; c.save(); c.clip(); c.shadowColor = "transparent"; c.strokeStyle = "rgba(255,255,255,0.03)"; c.lineWidth = 1; for(let i = -100; i < w + 100; i += 30) { c.beginPath(); c.moveTo(cardX + i + moveOffset, currentY); c.lineTo(cardX + i - 150 + moveOffset, currentY + cardH); c.stroke(); } c.restore(); const pulse = (Math.sin(now * 0.003) + 1) / 2; const borderGrad = c.createLinearGradient(cardX, currentY, cardX, currentY + cardH); borderGrad.addColorStop(0, `rgba(56, 189, 248, ${0.4 + (pulse * 0.2)})`); borderGrad.addColorStop(0.5, `rgba(234, 179, 8, ${0.4 + (pulse * 0.2)})`); borderGrad.addColorStop(1, `rgba(56, 189, 248, ${0.4 + (pulse * 0.2)})`); c.lineWidth = 3; c.strokeStyle = borderGrad; c.stroke(); const headerH = cardH * 0.20; const logoS = headerH * 0.8; const pad = 30; drawLogoWithBorder(c, team1Logo, cardX + pad, currentY + pad, logoS); c.textAlign = "left"; c.textBaseline = "middle"; c.fillStyle = "white"; c.font = `900 ${headerH * 0.3}px 'Montserrat'`; c.fillText(formatTeamName(match.t1), cardX + pad + logoS + 20, currentY + pad + (logoS*0.4)); c.fillStyle = "#38bdf8"; c.font = `700 ${headerH * 0.15}px 'Roboto Condensed'`; c.fillText("PLAYING TEAM", cardX + pad + logoS + 20, currentY + pad + (logoS*0.75)); drawLogoWithBorder(c, team2Logo, cardX + cardW - pad - logoS, currentY + pad, logoS); c.textAlign = "right"; c.fillStyle = "white"; c.font = `900 ${headerH * 0.3}px 'Montserrat'`; c.fillText(formatTeamName(match.t2), cardX + cardW - pad - logoS - 20, currentY + pad + (logoS*0.4)); c.fillStyle = "#38bdf8"; c.font = `700 ${headerH * 0.15}px 'Roboto Condensed'`; c.fillText("PLAYING TEAM", cardX + cardW - pad - logoS - 20, currentY + pad + (logoS*0.75)); const sepY = currentY + headerH; c.beginPath(); c.moveTo(cardX + 20, sepY); c.lineTo(cardX + cardW - 20, sepY); c.strokeStyle = "rgba(255,255,255,0.2)"; c.lineWidth = 2; c.stroke(); c.beginPath(); c.moveTo(cardX + cardW/2, sepY); c.lineTo(cardX + cardW/2, currentY + cardH - (cardH * 0.1)); c.stroke(); const listTopY = sepY + 20; const footerH = cardH * 0.08; const listHeight = (currentY + cardH - footerH) - listTopY - 10; const rowH = listHeight / 11; drawSimpleList(c, match.squad1, cardX + pad + 20, listTopY, rowH, "left", progress); drawSimpleList(c, match.squad2, cardX + cardW - pad - 20, listTopY, rowH, "right", progress); const footerY = currentY + cardH - footerH; c.fillStyle = "rgba(0, 0, 0, 0.4)"; c.beginPath(); c.moveTo(cardX, footerY); c.lineTo(cardX + cardW, footerY); c.lineTo(cardX + cardW, currentY + cardH - 20); c.quadraticCurveTo(cardX + cardW, currentY + cardH, cardX + cardW - 20, currentY + cardH); c.lineTo(cardX + 20, currentY + cardH); c.quadraticCurveTo(cardX, currentY + cardH, cardX, currentY + cardH - 20); c.fill(); c.textAlign = "center"; c.textBaseline = "middle"; c.fillStyle = "#fbbf24"; c.font = `800 ${footerH * 0.35}px 'Montserrat'`; let dateStr = "TODAY"; if (match.matchDate) { const d = new Date(match.matchDate); dateStr = d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }).toUpperCase(); } const venueStr = (match.venue || "VENUE").toUpperCase(); const formatStr = (match.playersPerSide ? `${match.playersPerSide}-A-SIDE` : "MATCH").toUpperCase(); c.fillText(`${venueStr}   •   ${dateStr}   •   ${formatStr}`, cardX + cardW/2, footerY + (footerH/2)); c.restore(); }
         function drawLogoWithBorder(c, img, x, y, s) { c.save(); c.shadowColor = "black"; c.shadowBlur = 10; c.shadowOffsetY = 5; c.beginPath(); c.arc(x + s/2, y + s/2, s/2, 0, Math.PI*2); c.fillStyle = "white"; c.fill(); c.shadowColor = "transparent"; c.beginPath(); c.arc(x + s/2, y + s/2, (s/2)-4, 0, Math.PI*2); c.clip(); if(img && img.complete) c.drawImage(img, x, y, s, s); else { c.fillStyle = "#334155"; c.fillRect(x,y,s,s); } c.restore(); }
         function drawSimpleList(c, squad, xPos, startY, rowH, align, progress) { c.textAlign = align; squad.forEach((name, i) => { const itemStart = 0.3 + (i * 0.05); let p = (progress - itemStart) / 0.15; p = Math.min(1, Math.max(0, p)); if (p > 0) { c.globalAlpha = p; const y = startY + (i * rowH) + (rowH/2); const xOff = (1 - p) * (align === 'left' ? -20 : 20); c.font = `700 ${rowH * 0.55}px 'Montserrat'`; c.fillStyle = "white"; c.fillText(name.toUpperCase(), xPos + xOff, y); } }); c.globalAlpha = 1; }
-        
         function drawProfessionalSummary(c, w, h) {
             const cardW = w * 0.82; const cardH = h * 0.72; const x = (w - cardW) / 2; const y = (h - cardH) / 2 + (h * 0.05); const headerH = cardH * 0.18; const footerH = cardH * 0.13; const time = Date.now() * 0.0015;
             c.save(); c.shadowColor = "rgba(0,0,0,0.8)"; c.shadowBlur = 60; c.shadowOffsetY = 20; const bgGrad = c.createLinearGradient(x, y, x, y + cardH); bgGrad.addColorStop(0, "#020617"); bgGrad.addColorStop(1, "#1e1b4b"); c.fillStyle = bgGrad; drawRoundRect(c, x, y, cardW, cardH, 20); c.fill();
