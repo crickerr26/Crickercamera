@@ -200,6 +200,7 @@
     <audio id="audio-four" src="four.mp3" preload="auto"></audio>
     <audio id="audio-six" src="six.mp3" preload="auto"></audio>
     <audio id="audio-wicket" src="wicket.mp3" preload="auto"></audio>
+    <audio id="audio-transition" src="transitionmusic.mp3" preload="auto"></audio>
 
     <div id="setup-screen">
         <h1 style="font-family: 'Anton'; font-size: 3rem; color: white; margin-bottom: 0.5rem; letter-spacing: 2px;">BROADCAST UNIT</h1>
@@ -281,7 +282,7 @@
         const db = firebase.firestore();
 
         // --- GLOBAL STATE ---
-        let match = { t1: "HOME", t2: "AWAY", score: 0, wickets: 0, overs: 0, balls: 0, striker: { name: "", runs: 0, balls: 0 }, nonStriker: { name: "", runs: 0, balls: 0 }, bowler: { name: "", wkts: 0, runs: 0, balls: 0 }, currentOver: [], target: 0, totalOvers: 20, matchStatus: "", winner: "", margin: "", pom: null, showDismissalCard: false, showSummaryOverlay: false };
+        let match = { t1: "HOME", t2: "AWAY", score: 0, wickets: 0, overs: 0, balls: 0, striker: { name: "", runs: 0, balls: 0 }, nonStriker: { name: "", runs: 0, balls: 0 }, bowler: { name: "", wkts: 0, runs: 0, balls: 0 }, currentOver: [], target: 0, totalOvers: 20, matchStatus: "", winner: "", margin: "", pom: null, showDismissalCard: false, showSummaryOverlay: false, desiredOverlay: null };
         let team1Logo = null, team2Logo = null;
         let t1CapImg = null, t2CapImg = null; 
         let lastActionId = null, animType = null, animTime = 0;
@@ -296,6 +297,16 @@
         const canvas = document.getElementById('broadcast-canvas');
         const ctx = canvas.getContext('2d');
         let recorder, chunks = [], isRecording = false;
+
+        // --- ANIMATION STATE MANAGEMENT ---
+        let overlayTransition = { 
+            phase: "CLOSED", // CLOSED, OPENING, OPEN, CLOSING
+            startTime: 0,
+            duration: 600, // ms
+            progress: 0,   // 0.0 to 1.0
+            activeType: "" // Current graphic being shown
+        };
+        const audioTransition = document.getElementById('audio-transition');
 
         // --- PARTICLES ---
         let particles = [];
@@ -399,7 +410,7 @@
             btn.disabled = true;
 
             try { 
-                ['audio-four','audio-six','audio-wicket'].forEach(id => document.getElementById(id).load()); 
+                ['audio-four','audio-six','audio-wicket','audio-transition'].forEach(id => document.getElementById(id).load()); 
             } catch(e){}
 
             // Try to start camera, wait for success
@@ -696,6 +707,64 @@
             });
         }
 
+        // --- TRANSITION LOGIC ---
+        function playTransitionSound() {
+            try {
+                audioTransition.currentTime = 0;
+                audioTransition.volume = 1.0;
+                audioTransition.play().catch(e => console.log("Audio interact required"));
+            } catch(e) {}
+        }
+
+        function updateTransitionState(targetType) {
+            const now = Date.now();
+            
+            // 1. If we have a target type but we are CLOSED or CLOSING, start OPENING
+            if (targetType && (overlayTransition.phase === "CLOSED" || overlayTransition.phase === "CLOSING")) {
+                overlayTransition.phase = "OPENING";
+                overlayTransition.startTime = now;
+                overlayTransition.activeType = targetType;
+                playTransitionSound(); // PLAY SOUND ON OPEN
+            }
+            
+            // 2. If target is empty/null but we are OPEN or OPENING, start CLOSING
+            else if (!targetType && (overlayTransition.phase === "OPEN" || overlayTransition.phase === "OPENING")) {
+                overlayTransition.phase = "CLOSING";
+                overlayTransition.startTime = now;
+                playTransitionSound(); // PLAY SOUND ON CLOSE
+            }
+            // 3. If switching directly from one type to another (e.g. Batting -> Bowling)
+            else if (targetType && targetType !== overlayTransition.activeType) {
+                 overlayTransition.activeType = targetType; // Snap switch or you could force a re-open
+            }
+
+            // --- CALCULATE PROGRESS ---
+            const elapsed = now - overlayTransition.startTime;
+            let rawProgress = Math.min(1, Math.max(0, elapsed / overlayTransition.duration));
+
+            if (overlayTransition.phase === "OPENING") {
+                // Elastic Out Ease
+                const p = rawProgress;
+                overlayTransition.progress = 1 - Math.pow(1 - p, 3); // Cubic Ease Out
+                if (rawProgress >= 1) overlayTransition.phase = "OPEN";
+            } 
+            else if (overlayTransition.phase === "CLOSING") {
+                // Cubic In Ease
+                overlayTransition.progress = 1 - Math.pow(rawProgress, 3); 
+                if (rawProgress >= 1) {
+                    overlayTransition.phase = "CLOSED";
+                    overlayTransition.activeType = "";
+                    overlayTransition.progress = 0;
+                }
+            } 
+            else if (overlayTransition.phase === "OPEN") {
+                overlayTransition.progress = 1;
+            } 
+            else {
+                overlayTransition.progress = 0;
+            }
+        }
+
         // --- DATABASE & TRIGGER LOGIC (FIXED) ---
         function listenToDB(id) {
             db.collection("live_matches").doc(id).onSnapshot(doc => {
@@ -703,27 +772,18 @@
                     const data = doc.data();
                     match = { ...match, ...data };
                     
-                    // --- VIEW TOGGLE LOGIC (FIXED) ---
-                    match.showSummaryOverlay = false; 
-                    match.summaryType = "";
+                    // --- DETERMINE DESIRED OVERLAY TYPE ---
+                    let desiredType = null; // Default to showing nothing (Live Bar)
 
-                    // Check which toggle is active in the database
-                    if (data.showSquad === true) {
-                        match.showSummaryOverlay = true;
-                        match.summaryType = "SQUAD";
-                    } else if (data.showBattingCard === true) {
-                        match.showSummaryOverlay = true;
-                        match.summaryType = "BATTING"; 
-                    } else if (data.showBowlingCard === true) {
-                        match.showSummaryOverlay = true;
-                        match.summaryType = "BOWLING";
-                    } else if (data.showRunRate === true) {
-                        match.showSummaryOverlay = true;
-                        match.summaryType = "RUN_RATE"; // NEW TYPE
-                    } else if (data.matchStatus === "COMPLETE") {
-                        match.showSummaryOverlay = true;
-                        match.summaryType = "MATCH_RESULT";
-                    }
+                    if (data.showSquad === true) desiredType = "SQUAD";
+                    else if (data.showBattingCard === true) desiredType = "BATTING"; 
+                    else if (data.showBowlingCard === true) desiredType = "BOWLING";
+                    else if (data.showRunRate === true) desiredType = "RUN_RATE";
+                    else if (data.matchStatus === "COMPLETE") desiredType = "MATCH_RESULT";
+
+                    // Tell the system what we WANT to see. 
+                    // The render loop will handle the transition.
+                    match.desiredOverlay = desiredType; 
 
                     if(data.t1Logo && (!team1Logo || team1Logo.src !== data.t1Logo)) { 
                         team1Logo = new Image(); team1Logo.crossOrigin = "anonymous"; team1Logo.src = data.t1Logo; 
@@ -751,7 +811,15 @@
 
         function triggerAudio(type) {
             triggerAnim(type); 
+            
+            // Play specific sound
             const audioId = type === '4' ? 'audio-four' : type === '6' ? 'audio-six' : type === 'W' ? 'audio-wicket' : null;
+            
+            // ALSO play the transition swoosh for impact on boundaries
+            if(['4','6','W'].includes(type)) {
+                playTransitionSound();
+            }
+
             if (audioId) {
                 const audio = document.getElementById(audioId);
                 audio.currentTime = 0;
@@ -979,17 +1047,48 @@
 
         // --- LIVE GRAPHICS (FIXED LOGIC) ---
         function drawLiveGraphics(w, h) {
+            // 1. Update the Transition Logic every frame
+            updateTransitionState(match.desiredOverlay);
+
+            // 2. Always draw the Bottom Scorebar (It sits behind everything)
+            // We fade it out slightly when a big card is opening
+            const c = ctx; // Ensuring context reference
+            c.save();
+            if (overlayTransition.progress > 0) {
+                // Fade out bottom bar as overlay opens
+                c.globalAlpha = 1 - (overlayTransition.progress * 1); 
+            }
+            drawNewLayout(c, w, h);
+            c.restore();
+
+            // 3. Handle Dismissal Card (Has its own logic, keeps priority)
             if (match.showDismissalCard === true && match.dismissalData && dismissalAnimState.active) {
-                drawDismissalCard(ctx, w, h);
+                drawDismissalCard(c, w, h);
+                return; 
             } 
-            else if (match.showSummaryOverlay === true) {
-                if (match.summaryType === "RUN_RATE") drawRunRateGraphic(ctx, w, h);
-                else if (match.summaryType === "SQUAD") drawSquadBoard(ctx, w, h);
-                else if (match.summaryType === "MATCH_RESULT") drawFinalResult(ctx, w, h);
-                else drawProfessionalSummary(ctx, w, h); // Handles BATTING and BOWLING too
-            } 
-            else {
-                drawNewLayout(ctx, w, h);
+
+            // 4. Draw The Main Overlays (Squad, Cards, Run Rate)
+            // Only draw if we are not CLOSED
+            if (overlayTransition.phase !== "CLOSED") {
+                
+                match.summaryType = overlayTransition.activeType; // Set type for the draw functions
+                
+                c.save();
+                
+                // --- ANIMATION MATH ---
+                // Slide Up Effect: It starts 100px down, moves to 0
+                const slideOffset = (1 - overlayTransition.progress) * 150; 
+                
+                c.translate(0, slideOffset); // Apply movement
+                c.globalAlpha = overlayTransition.progress; // Apply fade
+                
+                // --- DRAW THE CONTENT ---
+                if (match.summaryType === "RUN_RATE") drawRunRateGraphic(c, w, h);
+                else if (match.summaryType === "SQUAD") drawSquadBoard(c, w, h);
+                else if (match.summaryType === "MATCH_RESULT") drawFinalResult(c, w, h);
+                else drawProfessionalSummary(c, w, h); // Handles BATTING and BOWLING
+                
+                c.restore();
             }
         }
 
@@ -1157,8 +1256,37 @@
                 c.fillStyle = "white"; c.textBaseline = "middle"; c.fillText(subText, w/2, subY + (h*0.025)); c.textBaseline = "alphabetic"; 
 
                 // 3. TEAM SCORE CARDS
-                const cardY = h * 0.30; const cardH = h * 0.18; const cardW = w * 0.35; const cardGap = w * 0.04; const t1X = (w/2) - cardW - (cardGap/2); const t2X = (w/2) + (cardGap/2);
-                drawResultTeamCard(c, t1X, cardY, cardW, cardH, match.t1, team1Logo); drawResultTeamCard(c, t2X, cardY, cardW, cardH, match.t2, team2Logo);
+        const cardY = h * 0.30; const cardH = h * 0.18; const cardW = w * 0.35; const cardGap = w * 0.04; 
+        const t1X = (w/2) - cardW - (cardGap/2); 
+        const t2X = (w/2) + (cardGap/2);
+
+        // --- DIMMING LOGIC ---
+        const winnerText = (match.resultMain || "").toUpperCase();
+        // Use the explicit result data if available, otherwise fall back
+        const t1Data = match.resultT1 || { name: match.t1, score: "0/0", overs: "0.0" };
+        const t2Data = match.resultT2 || { name: match.t2, score: "0/0", overs: "0.0" };
+        
+        let t1Alpha = 1.0;
+        let t2Alpha = 1.0;
+
+        // Compare winner text with team names to find loser
+        if (winnerText.includes((t1Data.name || "").toUpperCase())) {
+            t2Alpha = 0.5; // Dim Team 2
+        } else if (winnerText.includes((t2Data.name || "").toUpperCase())) {
+            t1Alpha = 0.5; // Dim Team 1
+        }
+
+        // Draw Team 1
+        c.save(); 
+        c.globalAlpha = t1Alpha;
+        drawResultTeamCard(c, t1X, cardY, cardW, cardH, t1Data, team1Logo); 
+        c.restore();
+
+        // Draw Team 2
+        c.save(); 
+        c.globalAlpha = t2Alpha;
+        drawResultTeamCard(c, t2X, cardY, cardW, cardH, t2Data, team2Logo);
+        c.restore();
 
                 // 4. STATS LISTS
                 const listY = cardY + cardH + (h * 0.04); const listH = h * 0.32; const listW = w * 0.28; const listGap = (w - (listW * 3)) / 4; 
