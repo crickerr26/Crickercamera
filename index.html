@@ -495,22 +495,22 @@
             // FIX: Use devicePixelRatio for SHARP rendering on mobile/retina screens
             const dpr = window.devicePixelRatio || 1;
             
-            // Set Internal Resolution (Physical Pixels)
-            canvas.width = 1920 * dpr;
-            canvas.height = 1080 * dpr;
+            // Set Internal Resolution (Physical Pixels) - MATCHES SCREEN EXACTLY
+            canvas.width = window.innerWidth * dpr;
+            canvas.height = window.innerHeight * dpr;
             
-            // Scale Context to use 1920x1080 Logical Coordinates
+            // Scale Context to use Logical Coordinates (CSS Pixels)
             ctx.scale(dpr, dpr);
             
             // CSS Display Size (Fit to Screen)
             canvas.style.width = window.innerWidth + 'px';
             canvas.style.height = window.innerHeight + 'px';
             
-            // Disable Image Smoothing for Crisper Pixel Edges (Optional but recommended for sports graphics)
+            // High Quality Smoothing
             ctx.imageSmoothingEnabled = true;
             ctx.imageSmoothingQuality = 'high';
             
-            initParticles(1920, 1080);
+            initParticles(window.innerWidth, window.innerHeight);
         }
 
         async function connectToMatch() {
@@ -1146,9 +1146,10 @@ function goLiveOnDB(matchId, peerId) {
 
         // --- BACKGROUND-SAFE RENDER LOOP ---
         function renderLoop() {
-            // LOGICAL RESOLUTION (Coordinate System)
-            const w = 1920;
-            const h = 1080;
+            // FIX: Get Dynamic Logical Resolution (Screen Size)
+            const dpr = window.devicePixelRatio || 1;
+            const w = canvas.width / dpr;
+            const h = canvas.height / dpr;
             
             // Clear using logical coordinates
             ctx.clearRect(0, 0, w, h);
